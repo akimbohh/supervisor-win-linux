@@ -166,6 +166,13 @@ router.post('/rename', handle(async (req, res) => {
   res.json(await ops.rename(from, to));
 }));
 
+router.post('/chmod', handle(async (req, res) => {
+  const { path: p, mode } = req.body || {};
+  if (!p || mode == null) throw httpErr(400, 'path & mode required');
+  if (!require('../platform').capabilities().fsPermissions) throw httpErr(400, 'File permissions are not editable on this host');
+  res.json(await ops.chmod(p, mode));
+}));
+
 router.post('/delete', handle(async (req, res) => {
   const { paths } = req.body || {};
   if (!Array.isArray(paths) || !paths.length) throw httpErr(400, 'paths required');

@@ -1,5 +1,6 @@
 // Settings persistence. Read-through cache, write-through to disk.
 const path = require('path');
+const fs = require('fs');
 const { readJSON, writeJSON } = require('./store');
 
 const DEFAULTS = {
@@ -8,6 +9,8 @@ const DEFAULTS = {
   pinnedFolders: [],              // [{ name, path, icon? }]
   recentFolders: [],              // [path], capped
   blocklist: null,                // null = use defaults; or array of paths
+  blocklistAllowAll: false,       // explicit "allow everything" (UI-confirmed) — else defaults apply (MED-2)
+  watchUsePolling: false,         // chokidar polling for network/overlay mounts + inotify-exhaustion fallback (P-6)
   presets: [],                    // [{ id, name, folder, args, env, prePrompt }]
   notifications: {
     sessionFinished: true,
@@ -69,4 +72,27 @@ function pushRecent(folder) {
   return update({ recentFolders: list });
 }
 
-module.exports = { get, update, reset, pushRecent, DEFAULTS };
+// First-run/cross-platform migration (P-10): drop path entries that don't
+// exist on the current host (e.g. C:\Users\... carried onto Linux), and reseed
+// selfRepoPath from the actual repo location when it's missing/stale.
+function sanitizePaths() {
+  const cur = load();
+  const exists = (p) => { try { return typeof p === 'string' && fs.existsSync(p); } catch (e) { return false; } };
+  const patch = {};
+
+  const recent = (cur.recentFolders || []).filter(exists);
+  if (recent.length !== (cur.recentFolders || []).length) patch.recentFolders = recent;
+
+  if (Array.isArray(cur.pinnedFolders)) {
+    const pins = cur.pinnedFolders.filter(pin => exists(typeof pin === 'string' ? pin : pin && pin.path));
+    if (pins.length !== cur.pinnedFolders.length) patch.pinnedFolders = pins;
+  }
+
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  if (!exists(cur.selfRepoPath)) patch.selfRepoPath = repoRoot;
+
+  if (Object.keys(patch).length) update(patch);
+  return patch;
+}
+
+module.exports = { get, update, reset, pushRecent, sanitizePaths, DEFAULTS };

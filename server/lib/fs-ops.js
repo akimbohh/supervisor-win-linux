@@ -34,11 +34,13 @@ async function listDir(dirPath, { hidden = false } = {}) {
     const full = path.join(dirPath, ent.name);
     let st = null;
     try { st = await fsp.lstat(full); } catch (e) { continue; }
-    let dir = false, link = false, size = 0, mtime = 0;
+    let dir = false, link = false, size = 0, mtime = 0, broken = false;
     if (st.isSymbolicLink()) {
       link = true;
+      // A symlink whose target stat fails is broken — surface it distinctly
+      // instead of rendering as a 0-byte file (P-14). Common on Linux.
       try { const real = await fsp.stat(full); dir = real.isDirectory(); size = real.size; mtime = real.mtimeMs; }
-      catch (e) {}
+      catch (e) { broken = true; mtime = st.mtimeMs; }
     } else {
       dir = st.isDirectory();
       size = st.size;
@@ -49,8 +51,10 @@ async function listDir(dirPath, { hidden = false } = {}) {
       path: full,
       dir,
       link,
+      broken,
       size: dir ? null : size,
       mtime: Math.floor(mtime),
+      mode: st.mode,
       hidden: ent.name.startsWith('.'),
     });
   }
@@ -103,6 +107,18 @@ async function writeText(p, content) {
 async function mkdir(p) {
   ensureSafe(p);
   await fsp.mkdir(p, { recursive: true });
+  return statFile(p);
+}
+
+// chmod (POSIX permission edit — P-13). mode is an octal string like "755" or a
+// number. On Windows this is a near-no-op; the route gates it on the
+// fsPermissions capability so the UI shows it as N/A there.
+async function chmod(p, mode) {
+  ensureSafe(p);
+  let m = mode;
+  if (typeof mode === 'string') m = parseInt(mode, 8);
+  if (!Number.isInteger(m) || m < 0 || m > 0o7777) { const e = new Error('Invalid mode'); e.code = 'EINVAL'; throw e; }
+  await fsp.chmod(p, m);
   return statFile(p);
 }
 
@@ -292,7 +308,7 @@ function listZip(zipPath) {
 }
 
 module.exports = {
-  listDir, statFile, readText, writeText, mkdir, touch, rename, copyMany, moveMany,
+  listDir, statFile, readText, writeText, mkdir, touch, rename, chmod, copyMany, moveMany,
   moveToTrash, listTrash, restoreFromTrash, emptyTrash, deleteForever, listZip,
   uniqueDest, statSafe, isDirSync, copyAny, rmAny,
 };

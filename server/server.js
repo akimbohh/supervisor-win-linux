@@ -42,6 +42,7 @@ const { ensureDataDir } = require('./lib/store');
 ensureDataDir();
 const initial = auth.ensureInitialPassword();
 settings.get(); // touch to materialise defaults
+settings.sanitizePaths(); // P-10: drop stale/cross-platform paths, reseed selfRepoPath
 
 // PID file — written on boot, removed on graceful shutdown. start.bat reads
 // this on next launch to taskkill any stale process before binding the port.
