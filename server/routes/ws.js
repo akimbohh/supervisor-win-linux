@@ -13,7 +13,7 @@ function setup(server, { onMessage } = {}) {
       socket.destroy();
       return;
     }
-    const token = auth.readToken(req);
+    const token = auth.readToken(req, { allowQuery: true });
     if (!auth.verify(token)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();

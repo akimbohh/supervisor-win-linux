@@ -139,6 +139,14 @@ app.use(express.static(WEB_DIR, {
 
 app.use('/api/auth', require('./routes/auth'));
 
+// Forced first-login password change (CRIT-3): while the credential is still
+// the built-in default, block every API except /api/auth/* so the app is inert
+// until a real password is set. The frontend surfaces the change-password flow.
+app.use('/api', (req, res, next) => {
+  if (!auth.isDefaultPassword()) return next();
+  return res.status(403).json({ error: 'Set a password before using Supervisor.', mustChangePassword: true });
+});
+
 // Optional feature routes — require their files to exist; skip cleanly if missing.
 // (Real require() errors inside an existing route file still surface — only ENOENT skips.)
 function tryMount(prefix, modPath) {
@@ -177,7 +185,22 @@ const server = http.createServer(app);
 require('./routes/ws').setup(server);
 
 const PORT = parseInt(process.env.SUPERVISOR_PORT || '7778', 10);
-const BIND = process.env.SUPERVISOR_BIND || '0.0.0.0';
+let BIND = process.env.SUPERVISOR_BIND || '0.0.0.0';
+
+// CRIT-3: refuse to expose a default-password instance to the network. If the
+// credential is still the built-in default, force the bind to loopback so the
+// only way in is from the same host until a real password is set. Override
+// intentionally with SUPERVISOR_ALLOW_DEFAULT_BIND=1 (not recommended).
+function isLoopbackBind(addr) {
+  return addr === '127.0.0.1' || addr === '::1' || addr === 'localhost';
+}
+if (auth.isDefaultPassword() && !isLoopbackBind(BIND) && process.env.SUPERVISOR_ALLOW_DEFAULT_BIND !== '1') {
+  console.warn('');
+  console.warn('  ⚠  Password is still the default — binding to 127.0.0.1 only.');
+  console.warn('     Set a password (Settings → Account), then restart to expose on ' + BIND + '.');
+  console.warn('     Override with SUPERVISOR_ALLOW_DEFAULT_BIND=1 (NOT recommended).');
+  BIND = '127.0.0.1';
+}
 
 server.listen(PORT, BIND, () => {
   const ifaces = os.networkInterfaces();

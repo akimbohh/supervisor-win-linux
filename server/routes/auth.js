@@ -11,7 +11,8 @@ router.get('/me', (req, res) => {
   const token = auth.readToken(req);
   const payload = auth.verify(token);
   if (!payload) return res.status(401).json({ ok: false });
-  res.json({ ok: true, sub: payload.sub, exp: payload.exp, trusted: !!payload.trusted });
+  // mustChangePassword drives the forced first-login rotation (CRIT-3).
+  res.json({ ok: true, sub: payload.sub, exp: payload.exp, trusted: !!payload.trusted, mustChangePassword: auth.isDefaultPassword() });
 });
 
 router.post('/login', express.json(), (req, res) => {
@@ -32,10 +33,18 @@ router.post('/login', express.json(), (req, res) => {
   auth.recordSuccess(ip);
   const { token, maxAge } = auth.issueToken({ trusted: !!trusted });
   auth.setSessionCookie(res, token, maxAge);
-  res.json({ ok: true, trusted: !!trusted });
+  res.json({ ok: true, trusted: !!trusted, mustChangePassword: auth.isDefaultPassword() });
 });
 
 router.post('/logout', (req, res) => {
+  auth.clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+// Sign out every device: rotate the signing key + bump the token epoch so all
+// outstanding cookies (including trusted-device 60-day ones) stop verifying.
+router.post('/logout-all', auth.requireAuth, (req, res) => {
+  auth.rotateAuth();
   auth.clearSessionCookie(res);
   res.json({ ok: true });
 });
@@ -50,6 +59,12 @@ router.post('/change-password', express.json(), auth.requireAuth, (req, res) => 
     return res.status(401).json({ error: 'Current password is wrong' });
   }
   auth.setPassword(next);
+  // HIGH-2: rotating credentials on password change kills any stolen cookie —
+  // the very thing a password change is meant to accomplish. This invalidates
+  // the acting session too, so immediately re-issue a fresh cookie for it.
+  auth.rotateAuth();
+  const { token, maxAge } = auth.issueToken({ trusted: false });
+  auth.setSessionCookie(res, token, maxAge);
   res.json({ ok: true });
 });
 
