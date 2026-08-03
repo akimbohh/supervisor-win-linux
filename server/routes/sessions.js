@@ -2,7 +2,6 @@ const express = require('express');
 const auth = require('../lib/auth');
 const sessions = require('../lib/sessions');
 const settings = require('../lib/settings');
-const hub = require('../lib/hub');
 
 const router = express.Router();
 router.use(auth.requireAuth);

@@ -32,7 +32,7 @@ async function listServices() {
 // start|stop|restart|enable|disable a unit. Needs privilege; the error is
 // surfaced (systemctl exits non-zero with a polkit message otherwise).
 async function serviceControl(unit, action) {
-  if (!/^[\w@.\-]+\.service$/.test(unit)) return { ok: false, error: 'Invalid unit name' };
+  if (!/^[\w@.-]+\.service$/.test(unit)) return { ok: false, error: 'Invalid unit name' };
   if (!['start', 'stop', 'restart', 'enable', 'disable'].includes(action)) return { ok: false, error: 'Invalid action' };
   const r = await run('systemctl ' + action + ' ' + unit + ' 2>&1');
   return r.ok ? { ok: true } : { ok: false, error: r.err || r.out || 'systemctl failed' };

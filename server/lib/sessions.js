@@ -17,7 +17,6 @@ const LOG_TAIL_KEEP = 256 * 1024;       // bytes kept persisted on disk for resu
 const MAX_SESSIONS = parseInt(process.env.SUPERVISOR_MAX_SESSIONS || '32', 10);
 
 const sessions = new Map(); // id -> { meta, proc, logBuf, listeners }
-let nextSeq = 1;
 
 function newId() {
   const id = 's' + Date.now().toString(36) + '-' + crypto.randomBytes(2).toString('hex');
@@ -146,7 +145,7 @@ async function start({ folder, args, env, prePrompt, name, tag, command }) {
 
   const id = newId();
   // Resolve command: default 'claude rc' (matches the original behaviour).
-  let cmd = command || 'claude';
+  const cmd = command || 'claude';
   let cmdArgs = Array.isArray(args) && args.length ? args : ['rc'];
   // Allow caller to pass a single command string with embedded args
   if (Array.isArray(args)) cmdArgs = args;

@@ -3,7 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
+// Data dir defaults to <repo>/data but can be redirected with SUPERVISOR_DATA_DIR
+// (useful for isolated tests and for running multiple instances on one host).
+const DATA_DIR = process.env.SUPERVISOR_DATA_DIR
+  ? path.resolve(process.env.SUPERVISOR_DATA_DIR)
+  : path.join(__dirname, '..', '..', 'data');
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });

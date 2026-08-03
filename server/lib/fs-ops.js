@@ -4,7 +4,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const { trashDir, ensureSafe } = require('./paths');
-const { dataPath, readJSON, writeJSON } = require('./store');
+const { readJSON, writeJSON } = require('./store');
 const { withLock } = require('./mutex');
 const yauzl = require('yauzl');
 

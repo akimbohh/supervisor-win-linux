@@ -2,7 +2,6 @@
 // ~500ms to spawn a fresh powershell.exe every metrics tick) and all Windows
 // spawn/kill/power/restart semantics. This is the only file that should contain
 // Windows-specific process logic.
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
@@ -109,7 +108,7 @@ function spawnManaged(cmd, args, opts = {}) {
 }
 
 // taskkill /t kills the whole process tree; /f forces it.
-function killTree(pid, signal) {
+function killTree(pid, _signal) {
   if (!pid) return false;
   try { cp.spawn('taskkill', ['/pid', String(pid), '/f', '/t'], { shell: true, windowsHide: true }); return true; }
   catch (e) { return false; }

@@ -86,7 +86,7 @@ function killPid(pid) { return platform.killPid(pid); }
 
 // ── Live broadcaster ───────────────────────────────────────────────────────
 let timer = null;
-let history = { cpu: [], mem: [], rx: [], tx: [], t: [] };
+const history = { cpu: [], mem: [], rx: [], tx: [], t: [] };
 const HIST_MAX = 60;
 const TICK_MS = 2500;
 let snapshotInFlight = false;

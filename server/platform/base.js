@@ -1,7 +1,6 @@
 // POSIX platform adapter (Linux + macOS best-effort). win32.js overrides the
 // pieces that differ. All process.platform-specific behavior for non-Windows
 // hosts lives here or in linux.js — never in server/lib or server/routes.
-const os = require('os');
 const fs = require('fs');
 const cp = require('child_process');
 const capabilities = require('./capabilities');

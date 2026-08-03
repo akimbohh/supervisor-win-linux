@@ -9,9 +9,8 @@ const archiver = require('archiver');
 
 const auth = require('../lib/auth');
 const ops = require('../lib/fs-ops');
-const { getQuickLocations, ensureSafe, normalize, isWin } = require('../lib/paths');
+const { getQuickLocations, ensureSafe, isWin } = require('../lib/paths');
 const settings = require('../lib/settings');
-const hub = require('../lib/hub');
 const watchers = require('../lib/watchers');
 
 const router = express.Router();
@@ -110,8 +109,8 @@ router.get('/raw', handle(async (req, res) => {
   const range = req.headers.range;
   if (range && /^bytes=/.test(range)) {
     const m = /^bytes=(\d*)-(\d*)$/.exec(range);
-    let start = m[1] ? parseInt(m[1], 10) : 0;
-    let end = m[2] ? parseInt(m[2], 10) : st.size - 1;
+    const start = m[1] ? parseInt(m[1], 10) : 0;
+    const end = m[2] ? parseInt(m[2], 10) : st.size - 1;
     if (isNaN(start) || isNaN(end) || start > end || end >= st.size) {
       res.setHeader('Content-Range', 'bytes */' + st.size);
       return res.status(416).end();

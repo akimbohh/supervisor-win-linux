@@ -31,7 +31,6 @@ const os = require('os');
 })();
 
 const express = require('express');
-const cookieLib = require('cookie');
 
 const auth = require('./lib/auth');
 const hub = require('./lib/hub');
