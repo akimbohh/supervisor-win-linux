@@ -23,6 +23,8 @@ const DEFAULTS = {
   fileSort: {},                   // { [folder]: { key, dir } }
   quickKeys: [],                  // [{ id, kind, label, ...payload }] — console bottom-row buttons
   selfRepoPath: path.resolve(__dirname, '..', '..'), // supervisor's own repo — target for maintenance sessions
+  maintenanceSkipPermissions: true, // pass --dangerously-skip-permissions to headless `claude -p` (§6)
+  maintenanceTimeoutMs: 600000,     // hard timeout for a headless maintenance run
   trustedDevices: {},             // { devId: name } (informational; cookie carries the real trust)
   autoTrustClaudeFolders: true,   // pre-accept ~/.claude.json hasTrustDialogAccepted before spawn
 };
