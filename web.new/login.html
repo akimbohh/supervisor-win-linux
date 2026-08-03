@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-accent="amber">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <title>Supervisor — Sign in</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="login-shell">
+  <form class="login-card" id="login-form" autocomplete="off">
+    <div class="login-logo" id="login-logo"></div>
+    <h1 class="login-title">Supervisor</h1>
+    <p class="login-sub">Sign in to your remote control panel.</p>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <div class="input" style="position:relative">
+        <input type="password" id="password" autocomplete="current-password" autofocus required style="width:100%;background:transparent;border:0;outline:0;padding-right:36px">
+        <button type="button" class="btn ghost icon" id="toggle-vis" title="Show/hide" tabindex="-1" style="position:absolute;right:6px;top:50%;transform:translateY(-50%)"></button>
+      </div>
+      <div class="err" id="err"></div>
+    </div>
+
+    <label class="row" style="cursor:pointer;color:var(--text-2);font-size:13px;border:0;padding:0;min-height:0;gap:10px">
+      <span class="checkbox" id="trust-cb"></span>
+      <input type="checkbox" id="trusted" hidden>
+      <span>Trust this device for 60 days</span>
+    </label>
+
+    <button type="submit" class="btn primary" id="submit" style="margin-top:4px">
+      <span id="submit-label">Sign in</span>
+    </button>
+  </form>
+</div>
+
+<!-- Icons module exposes window.icon (string-returning) used for the inline SVGs below. -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script type="text/babel" src="icons.jsx"></script>
+
+<script>
+  function $(s){return document.querySelector(s);}
+  function ensureIcon(){
+    if (typeof window.icon !== 'function') return setTimeout(ensureIcon, 30);
+    $('#login-logo').innerHTML = window.icon('layers', { size: 22 });
+    $('#toggle-vis').innerHTML = window.icon('eye', { size: 16 });
+  }
+  ensureIcon();
+
+  const cb = $('#trust-cb'), inp = $('#trusted');
+  cb.addEventListener('click', () => { inp.checked = !inp.checked; cb.classList.toggle('checked', inp.checked); });
+
+  $('#toggle-vis').addEventListener('click', () => {
+    const p = $('#password');
+    p.type = p.type === 'password' ? 'text' : 'password';
+    $('#toggle-vis').innerHTML = window.icon(p.type === 'password' ? 'eye' : 'eye-off', { size: 16 });
+  });
+
+  $('#login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('#password').value;
+    const trusted = $('#trusted').checked;
+    const btn = $('#submit'), lbl = $('#submit-label');
+    btn.disabled = true; lbl.textContent = 'Signing in…';
+    $('#err').textContent = '';
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, trusted }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Sign-in failed');
+      const params = new URLSearchParams(location.search);
+      location.href = params.get('next') || '/';
+    } catch (err) {
+      $('#err').textContent = err.message;
+    } finally {
+      btn.disabled = false; lbl.textContent = 'Sign in';
+    }
+  });
+</script>
+</body>
+</html>

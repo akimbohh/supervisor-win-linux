@@ -1,0 +1,35 @@
+{
+  "name": "supervisor",
+  "version": "1.0.0",
+  "description": "Personal remote control panel for a Windows PC: Claude Code session manager, file manager, shell console, system dashboard. Mobile-first, accessed over Tailscale.",
+  "private": true,
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "build:vendor": "node build.js",
+    "postinstall": "node build.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "chokidar": "^3.6.0",
+    "codemirror": "^5.65.16",
+    "cookie": "^0.6.0",
+    "express": "^4.19.2",
+    "highlight.js": "^11.9.0",
+    "mime-types": "^2.1.35",
+    "multer": "^1.4.5-lts.1",
+    "pdfjs-dist": "^4.6.82",
+    "web-push": "^3.6.7",
+    "ws": "^8.17.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "yauzl": "^3.1.3"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
+  }
+}
