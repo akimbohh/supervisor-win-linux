@@ -901,17 +901,35 @@ window.FilesView = async function (root, { rest, app }) {
   }
 
   // Minimal markdown renderer (no deps). Handles headings, bold, italic, code, lists, links, blockquote.
+  //
+  // SECURITY: the source is untrusted (any .md file on disk, including ones
+  // downloaded from the internet or written by a Claude session). The whole
+  // source is HTML-escaped FIRST, then markdown substitutions are applied to
+  // the already-escaped text — so a literal `<img onerror=...>` in the file
+  // renders as inert text, never as markup. Fenced code blocks are pulled out
+  // before escaping (so highlight.js can see the raw source) and their
+  // pre-built, individually-escaped HTML is spliced back in afterwards.
   function renderMarkdown(src) {
-    const esc = (s) => s.replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
-    // Code blocks first
-    let out = src.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, body) => {
-      const escaped = esc(body);
+    const esc = (s) => s.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    // 1. Extract fenced code blocks → placeholder tokens (NUL-delimited so
+    //    no later rule or escape touches them). Store their finished HTML.
+    const codeBlocks = [];
+    let work = src.replace(/```([\w-]*)\n([\s\S]*?)```/g, (_, lang, bodyRaw) => {
+      const escaped = esc(bodyRaw);
       let code = escaped;
       if (window.hljs && lang && window.hljs.getLanguage(lang)) {
-        try { code = window.hljs.highlight(body, { language: lang, ignoreIllegals: true }).value; } catch (e) { code = escaped; }
+        // highlight.js returns HTML with only safe spans; it escapes its input.
+        try { code = window.hljs.highlight(bodyRaw, { language: lang, ignoreIllegals: true }).value; } catch (e) { code = escaped; }
       }
-      return '<pre style="background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto"><code>' + code + '</code></pre>';
+      const idx = codeBlocks.push('<pre class="md-pre"><code>' + code + '</code></pre>') - 1;
+      return '\x00CB' + idx + '\x00';
     });
+
+    // 2. Escape EVERYTHING that remains. From here on, no raw source reaches innerHTML.
+    let out = esc(work);
+
+    // 3. Block + inline substitutions, all operating on escaped text.
     // Headings
     out = out.replace(/^###### (.+)$/gm, '<h6>$1</h6>')
              .replace(/^##### (.+)$/gm, '<h5>$1</h5>')
@@ -920,20 +938,25 @@ window.FilesView = async function (root, { rest, app }) {
              .replace(/^## (.+)$/gm, '<h2>$1</h2>')
              .replace(/^# (.+)$/gm, '<h1>$1</h1>');
     // Inline code
-    out = out.replace(/`([^`]+)`/g, '<code style="background:var(--surface-2);padding:1px 6px;border-radius:4px;font-family:var(--mono)">$1</code>');
+    out = out.replace(/`([^`]+)`/g, '<code class="md-code">$1</code>');
     // Bold + italic
     out = out.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
              .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
-    // Links
-    out = out.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
+    // Links — URL is already escaped, so quotes cannot break out of the attribute;
+    // scheme is restricted to http/https so javascript:/data: are never linkified.
+    out = out.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
     // Lists (very simple, line-based)
     out = out.replace(/(^\- .+(?:\n\- .+)*)/gm, (m) => {
       const items = m.split(/\n/).map(l => l.replace(/^\- /, '').trim()).map(t => '<li>' + t + '</li>').join('');
       return '<ul>' + items + '</ul>';
     });
-    // Blockquote
-    out = out.replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid var(--border-strong);padding-left:12px;color:var(--text-2);margin:8px 0">$1</blockquote>');
-    // Paragraphs (any remaining double-newline blocks)
+    // Blockquote — after escaping, "> " is now "&gt; "
+    out = out.replace(/^&gt; (.+)$/gm, '<blockquote class="md-quote">$1</blockquote>');
+
+    // 4. Splice code blocks back in (their HTML is trusted: escaped or hljs output).
+    out = out.replace(/\x00CB(\d+)\x00/g, (_, i) => codeBlocks[Number(i)] || '');
+
+    // 5. Paragraphs (any remaining double-newline blocks)
     out = out.split(/\n{2,}/).map(b => {
       if (/^<(h\d|ul|pre|blockquote)/.test(b.trim())) return b;
       return '<p>' + b.replace(/\n/g, '<br>') + '</p>';

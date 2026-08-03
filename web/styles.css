@@ -765,3 +765,8 @@ a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Markdown preview (escaped renderer output — styles here, not inline, for CSP) */
+.md-pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: auto; }
+.md-code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-family: var(--mono); }
+.md-quote { border-left: 3px solid var(--border-strong); padding-left: 12px; color: var(--text-2); margin: 8px 0; }
