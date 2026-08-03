@@ -5,7 +5,12 @@ const path = require('path');
 const crypto = require('crypto');
 const { trashDir, ensureSafe } = require('./paths');
 const { dataPath, readJSON, writeJSON } = require('./store');
+const { withLock } = require('./mutex');
 const yauzl = require('yauzl');
+
+// All trash-manifest read-modify-write sequences serialize on this key so
+// concurrent delete/restore/empty requests can't clobber the manifest (MED-6).
+const TRASH_LOCK = 'trash-manifest';
 
 function ensureTrash() {
   fs.mkdirSync(trashDir(), { recursive: true });
@@ -187,9 +192,10 @@ function saveTrashManifest(m) {
 }
 
 async function moveToTrash(paths) {
+  // Validate + move files OUTSIDE the lock (slow I/O), then mutate the manifest
+  // under the lock so concurrent callers serialize on the read-modify-write.
   ensureTrash();
-  const m = trashManifest();
-  const items = [];
+  const staged = [];
   for (const p of paths) {
     ensureSafe(p);
     const id = Date.now().toString(36) + '-' + crypto.randomBytes(3).toString('hex');
@@ -200,17 +206,19 @@ async function moveToTrash(paths) {
       await copyAny(p, target);
       await rmAny(p);
     }
-    const item = { id, originalPath: p, trashedPath: target, name: path.basename(p), when: Date.now() };
-    m.items.unshift(item);
-    items.push(item);
+    staged.push({ id, originalPath: p, trashedPath: target, name: path.basename(p), when: Date.now() });
   }
-  // Cap trash to 500 items, oldest evicted (and removed from disk)
-  while (m.items.length > 500) {
-    const old = m.items.pop();
-    try { await rmAny(old.trashedPath); } catch (e) {}
-  }
-  saveTrashManifest(m);
-  return items;
+  return withLock(TRASH_LOCK, async () => {
+    const m = trashManifest();
+    for (const item of staged) m.items.unshift(item);
+    // Cap trash to 500 items, oldest evicted (and removed from disk)
+    while (m.items.length > 500) {
+      const old = m.items.pop();
+      try { await rmAny(old.trashedPath); } catch (e) {}
+    }
+    saveTrashManifest(m);
+    return staged;
+  });
 }
 
 async function listTrash() {
@@ -219,37 +227,43 @@ async function listTrash() {
 }
 
 async function restoreFromTrash(id) {
-  const m = trashManifest();
-  const idx = m.items.findIndex(it => it.id === id);
-  if (idx === -1) throw new Error('Trash item not found');
-  const it = m.items[idx];
-  let dest = it.originalPath;
-  if (fs.existsSync(dest)) dest = uniqueDest(path.dirname(dest), path.basename(dest));
-  await fsp.mkdir(path.dirname(dest), { recursive: true });
-  await fsp.rename(it.trashedPath, dest);
-  m.items.splice(idx, 1);
-  saveTrashManifest(m);
-  return { restored: dest };
+  return withLock(TRASH_LOCK, async () => {
+    const m = trashManifest();
+    const idx = m.items.findIndex(it => it.id === id);
+    if (idx === -1) throw new Error('Trash item not found');
+    const it = m.items[idx];
+    let dest = it.originalPath;
+    if (fs.existsSync(dest)) dest = uniqueDest(path.dirname(dest), path.basename(dest));
+    await fsp.mkdir(path.dirname(dest), { recursive: true });
+    await fsp.rename(it.trashedPath, dest);
+    m.items.splice(idx, 1);
+    saveTrashManifest(m);
+    return { restored: dest };
+  });
 }
 
 async function emptyTrash() {
-  const m = trashManifest();
-  for (const it of m.items) {
-    try { await rmAny(it.trashedPath); } catch (e) {}
-  }
-  m.items = [];
-  saveTrashManifest(m);
-  return { ok: true };
+  return withLock(TRASH_LOCK, async () => {
+    const m = trashManifest();
+    for (const it of m.items) {
+      try { await rmAny(it.trashedPath); } catch (e) {}
+    }
+    m.items = [];
+    saveTrashManifest(m);
+    return { ok: true };
+  });
 }
 
 async function deleteForever(id) {
-  const m = trashManifest();
-  const idx = m.items.findIndex(it => it.id === id);
-  if (idx === -1) return false;
-  try { await rmAny(m.items[idx].trashedPath); } catch (e) {}
-  m.items.splice(idx, 1);
-  saveTrashManifest(m);
-  return true;
+  return withLock(TRASH_LOCK, async () => {
+    const m = trashManifest();
+    const idx = m.items.findIndex(it => it.id === id);
+    if (idx === -1) return false;
+    try { await rmAny(m.items[idx].trashedPath); } catch (e) {}
+    m.items.splice(idx, 1);
+    saveTrashManifest(m);
+    return true;
+  });
 }
 
 // --- Zip listing (no extraction) ---

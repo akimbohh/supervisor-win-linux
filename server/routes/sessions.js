@@ -43,6 +43,7 @@ router.post('/', async (req, res) => {
   } catch (e) {
     if (e.code === 'EBLOCKED') return res.status(403).json({ error: e.message });
     if (e.code === 'ENOENT') return res.status(404).json({ error: e.message });
+    if (e.code === 'ELIMIT') return res.status(429).json({ error: e.message });
     res.status(400).json({ error: e.message });
   }
 });

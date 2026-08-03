@@ -14,6 +14,8 @@ try { pty = require('node-pty'); } catch (e) { /* fallback below */ }
 const SCROLLBACK_MAX = 10 * 1024 * 1024; // 10 MB on disk per shell
 const SCROLLBACK_DIR = 'shells';
 const META_FILE = 'shells.json';
+// Resource ceiling (MED-5): cap concurrent PTYs/child processes per instance.
+const MAX_SHELLS = parseInt(process.env.SUPERVISOR_MAX_SHELLS || '24', 10);
 
 const shells = new Map(); // id -> Shell
 let nextNum = 1;
@@ -166,6 +168,11 @@ function get(id) {
 }
 
 function create({ name, cwd, shellPath, shellArgs, cols, rows } = {}) {
+  if (shells.size >= MAX_SHELLS) {
+    const e = new Error('Shell limit reached (' + MAX_SHELLS + '). Close a shell or raise SUPERVISOR_MAX_SHELLS.');
+    e.code = 'ELIMIT';
+    throw e;
+  }
   const id = newId();
   if (!name) name = 'Shell ' + (nextNum++);
   const s = new Shell({ id, name, cwd, shellPath, shellArgs, cols, rows });

@@ -13,6 +13,8 @@ const SESSIONS_FILE = 'sessions.json';
 const LOG_DIR = 'session-logs';
 const MAX_LOG_BYTES = 10 * 1024 * 1024; // per-session ring cap (in memory)
 const LOG_TAIL_KEEP = 256 * 1024;       // bytes kept persisted on disk for resume
+// Resource ceiling (MED-5): cap concurrently-running Claude sessions.
+const MAX_SESSIONS = parseInt(process.env.SUPERVISOR_MAX_SESSIONS || '32', 10);
 
 const sessions = new Map(); // id -> { meta, proc, logBuf, listeners }
 let nextSeq = 1;
@@ -126,6 +128,12 @@ function get(id) {
 async function start({ folder, args, env, prePrompt, name, tag, command }) {
   ensureSafe(folder);
   if (!fs.existsSync(folder)) { const e = new Error('Folder does not exist'); e.code = 'ENOENT'; throw e; }
+  const running = [...sessions.values()].filter(s => s.meta.status === 'running' || s.meta.status === 'killing').length;
+  if (running >= MAX_SESSIONS) {
+    const e = new Error('Session limit reached (' + MAX_SESSIONS + '). Stop a session or raise SUPERVISOR_MAX_SESSIONS.');
+    e.code = 'ELIMIT';
+    throw e;
+  }
 
   // Pre-accept Claude Code's workspace trust dialog. `claude rc` requires this
   // to be done interactively in a real PTY — pre-writing ~/.claude.json is not

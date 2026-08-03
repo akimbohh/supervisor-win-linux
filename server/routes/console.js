@@ -18,7 +18,7 @@ router.post('/', (req, res) => {
   try {
     const { name, cwd, shellPath, shellArgs, cols, rows } = req.body || {};
     res.json(shells.create({ name, cwd, shellPath, shellArgs, cols, rows }));
-  } catch (e) { res.status(400).json({ error: e.message }); }
+  } catch (e) { res.status(e.code === 'ELIMIT' ? 429 : 400).json({ error: e.message }); }
 });
 
 router.post('/:id/write', (req, res) => {
