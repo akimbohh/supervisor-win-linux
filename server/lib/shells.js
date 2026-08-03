@@ -2,11 +2,11 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const cp = require('child_process');
 const crypto = require('crypto');
 const hub = require('./hub');
 const { dataPath, ensureDataDir } = require('./store');
 const { ensureSafe } = require('./paths');
+const platform = require('../platform');
 
 let pty = null;
 try { pty = require('node-pty'); } catch (e) { /* fallback below */ }
@@ -30,8 +30,7 @@ function topic(id) { return 'shell:' + id; }
 function newId() { return 'sh' + Date.now().toString(36) + '-' + crypto.randomBytes(2).toString('hex'); }
 
 function defaultShell() {
-  if (process.platform === 'win32') return process.env.COMSPEC || 'cmd.exe';
-  return process.env.SHELL || '/bin/bash';
+  return platform.defaultShell();
 }
 function defaultArgs() {
   return [];
@@ -70,7 +69,8 @@ class Shell {
       this.proc.onExit(({ exitCode, signal }) => this._onExit(exitCode, signal));
     } else {
       // Fallback: pipe stdio. No PTY semantics (no resize, no tty colours).
-      this.proc = cp.spawn(this.shellPath, this.shellArgs, {
+      // spawnManaged gives us a killable process group on POSIX (P-12).
+      this.proc = platform.spawnManaged(this.shellPath, this.shellArgs, {
         cwd: this.cwd,
         windowsHide: true,
         env: { ...process.env, TERM: 'dumb' },
@@ -138,8 +138,7 @@ class Shell {
     try {
       if (this.alive) {
         if (this.usingPty) this.proc.kill();
-        else if (process.platform === 'win32' && this.proc.pid) cp.spawn('taskkill', ['/pid', String(this.proc.pid), '/f', '/t'], { shell: true, windowsHide: true });
-        else this.proc.kill('SIGTERM');
+        else if (this.proc.pid) platform.killTree(this.proc.pid, 'SIGTERM');
       }
     } catch (e) {}
     this.alive = false;

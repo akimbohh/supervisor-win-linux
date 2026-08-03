@@ -1,13 +1,13 @@
 // Claude Code session manager: spawn, capture log, persist metadata, broadcast updates.
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const crypto = require('crypto');
 const hub = require('./hub');
 const { readJSON, writeJSON, dataPath, ensureDataDir } = require('./store');
 const { ensureSafe } = require('./paths');
 const settings = require('./settings');
 const claudeConfig = require('./claude-config');
+const platform = require('../platform');
 
 const SESSIONS_FILE = 'sessions.json';
 const LOG_DIR = 'session-logs';
@@ -154,7 +154,9 @@ async function start({ folder, args, env, prePrompt, name, tag, command }) {
   const procEnv = { ...process.env, ...(env || {}) };
   let proc;
   try {
-    proc = spawn(cmd, cmdArgs, { cwd: folder, shell: true, windowsHide: false, env: procEnv });
+    // Platform adapter picks shell:true (Windows, for claude.cmd) vs a detached
+    // process group (POSIX, so killTree reaches `claude`, not just a sh wrapper).
+    proc = platform.spawnManaged(cmd, cmdArgs, { cwd: folder, windowsHide: false, env: procEnv });
   } catch (e) {
     const err = new Error('Failed to spawn: ' + e.message); err.code = 'ESPAWN'; throw err;
   }
@@ -215,11 +217,7 @@ function kill(id) {
   const s = sessions.get(id);
   if (!s) return false;
   try {
-    if (process.platform === 'win32' && s.proc && s.proc.pid) {
-      spawn('taskkill', ['/pid', String(s.proc.pid), '/f', '/t'], { shell: true, windowsHide: true });
-    } else if (s.proc && !s.proc.killed) {
-      s.proc.kill('SIGTERM');
-    }
+    if (s.proc && s.proc.pid) platform.killTree(s.proc.pid, 'SIGTERM');
     s.meta.status = 'killing';
     hub.publish(topicFor(id), { event: 'status', status: s.meta.status });
     hub.publish('sessions', { event: 'changed', id });
@@ -263,13 +261,7 @@ function clear(id) {
   const s = sessions.get(id);
   if (!s) return false;
   if (s.meta.status === 'running' || s.meta.status === 'killing') {
-    try {
-      if (process.platform === 'win32' && s.proc && s.proc.pid) {
-        spawn('taskkill', ['/pid', String(s.proc.pid), '/f', '/t'], { shell: true, windowsHide: true });
-      } else if (s.proc && !s.proc.killed) {
-        s.proc.kill('SIGKILL');
-      }
-    } catch (e) {}
+    try { if (s.proc && s.proc.pid) platform.killTree(s.proc.pid, 'SIGKILL'); } catch (e) {}
   }
   sessions.delete(id);
   try { fs.unlinkSync(logFile(id)); } catch (e) {}
@@ -324,10 +316,7 @@ function bootRestore() {
 function closeAll() {
   for (const s of sessions.values()) {
     try {
-      if (s.proc && !s.proc.killed && s.proc.pid) {
-        if (process.platform === 'win32') spawn('taskkill', ['/pid', String(s.proc.pid), '/f', '/t'], { shell: true, windowsHide: true });
-        else s.proc.kill('SIGTERM');
-      }
+      if (s.proc && !s.proc.killed && s.proc.pid) platform.killTree(s.proc.pid, 'SIGTERM');
     } catch (e) {}
   }
   persistMeta();

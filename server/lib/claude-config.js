@@ -13,8 +13,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const cp = require('child_process');
 const { dataPath, ensureDataDir } = require('./store');
+const platform = require('../platform');
 
 let pty = null;
 try { pty = require('node-pty'); } catch (e) { pty = null; }
@@ -78,8 +78,7 @@ async function trustFolderInteractive(folder, { timeoutMs = 8000 } = {}) {
   return new Promise((resolve) => {
     let term;
     try {
-      const cmd = process.platform === 'win32' ? (process.env.COMSPEC || 'cmd.exe') : 'sh';
-      const args = process.platform === 'win32' ? ['/c', 'claude'] : ['-c', 'claude'];
+      const { cmd, args } = platform.shellRunCommand('claude');
       term = pty.spawn(cmd, args, {
         name: 'xterm-256color', cols: 100, rows: 30,
         cwd: folder, env: process.env,

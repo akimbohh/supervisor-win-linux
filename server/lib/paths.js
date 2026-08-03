@@ -4,8 +4,9 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { readJSON } = require('./store');
+const platform = require('../platform');
 
-const isWin = process.platform === 'win32';
+const isWin = platform.isWin;
 
 // Repo root and the app's own state dir / env file. These are ALWAYS protected
 // (MED-1): the Files API must never read data/secret.bin (cookie signing key),

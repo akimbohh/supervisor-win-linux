@@ -1,7 +1,7 @@
 const express = require('express');
-const cp = require('child_process');
 const auth = require('../lib/auth');
 const metrics = require('../lib/metrics');
+const platform = require('../platform');
 
 const router = express.Router();
 router.use(auth.requireAuth);
@@ -17,20 +17,24 @@ router.get('/', async (req, res) => {
 
 router.get('/history', (req, res) => res.json(metrics.getHistory()));
 
+// Capability map the frontend consumes to decide what to render (§3.2).
+router.get('/capabilities', (req, res) => res.json(platform.capabilities()));
+
 router.post('/power', async (req, res) => {
   const { action, password } = req.body || {};
   if (!password) return res.status(400).json({ error: 'Password required' });
   if (!auth.getCreds() || !auth.verifyPassword(password, auth.getCreds())) return res.status(401).json({ error: 'Wrong password' });
-  let cmd = null;
-  if (action === 'shutdown') cmd = process.platform === 'win32' ? 'shutdown /s /t 5' : 'shutdown -h +0';
-  else if (action === 'restart') cmd = process.platform === 'win32' ? 'shutdown /r /t 5' : 'shutdown -r +0';
-  else if (action === 'sleep') cmd = process.platform === 'win32'
-      ? 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0'
-      : 'systemctl suspend';
-  else if (action === 'cancel') cmd = process.platform === 'win32' ? 'shutdown /a' : 'shutdown -c';
-  else return res.status(400).json({ error: 'Unknown action' });
-  try { cp.exec(cmd, { timeout: 5000 }); res.json({ ok: true, scheduled: cmd }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  if (!['shutdown', 'restart', 'sleep', 'cancel'].includes(action)) return res.status(400).json({ error: 'Unknown action' });
+
+  const caps = platform.capabilities();
+  if (action === 'sleep' && !caps.power.sleep) {
+    return res.status(400).json({ error: 'Sleep is unavailable on this host' });
+  }
+  // powerAction reports real success/failure now (P-3): a permission error no
+  // longer returns {ok:true} after the response has been sent.
+  const result = await platform.powerAction(action);
+  if (result.ok) res.json({ ok: true, scheduled: result.scheduled });
+  else res.status(500).json({ error: result.error || 'Power action failed' });
 });
 
 module.exports = router;

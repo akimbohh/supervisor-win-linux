@@ -2,8 +2,8 @@
 // Spawns `claude -p` (non-interactive print mode) in the supervisor repo with
 // the user's prompt on stdin, captures output, broadcasts to clients via the
 // 'maintenance' WS topic.
-const { spawn } = require('child_process');
 const hub = require('./hub');
+const platform = require('../platform');
 
 const MAX_LOG_BYTES = 2 * 1024 * 1024;
 
@@ -71,9 +71,8 @@ function start({ prompt, cwd }) {
   // claude doesn't print "no stdin data received in 3s".
   let proc;
   try {
-    proc = spawn('claude', ['-p'], {
+    proc = platform.spawnManaged('claude', ['-p'], {
       cwd,
-      shell: true,
       windowsHide: false,
       env: { ...process.env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -118,11 +117,7 @@ function start({ prompt, cwd }) {
 function cancel() {
   if (!isBusy() || !state.proc || !state.proc.pid) return false;
   try {
-    if (process.platform === 'win32') {
-      spawn('taskkill', ['/pid', String(state.proc.pid), '/f', '/t'], { shell: true, windowsHide: true });
-    } else {
-      state.proc.kill('SIGTERM');
-    }
+    platform.killTree(state.proc.pid, 'SIGTERM');
     return true;
   } catch (e) { return false; }
 }
