@@ -1,0 +1,45 @@
+# Supervisor systemd unit (P-9).
+#
+# Install:
+#   sudo cp deploy/supervisor.service /etc/systemd/system/supervisor.service
+#   # edit User/WorkingDirectory/Environment below to match your install, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now supervisor
+#
+# server.js handles SIGTERM/SIGINT gracefully, so `systemctl stop` is clean and
+# the app's in-app "Restart" (POST /api/maintenance/restart) just calls
+# process.exit(0) and lets Restart=always bring it back.
+
+[Unit]
+Description=Supervisor — personal remote control panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as a dedicated non-root user (create one, or use your login user).
+User=supervisor
+Group=supervisor
+WorkingDirectory=/opt/supervisor
+
+# systemd's default PATH will NOT find an nvm/npm-global `node` or `claude`.
+# Set an explicit PATH that includes wherever node and claude actually live.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+Environment=SUPERVISOR_PORT=7778
+# Bind to the Tailscale interface or localhost; avoid 0.0.0.0 on a public VPS.
+Environment=SUPERVISOR_BIND=0.0.0.0
+# First-run password (ignored after data/passwd.json exists). Change immediately.
+# Environment=SUPERVISOR_PASSWORD=change-me-now
+
+ExecStart=/usr/bin/node server/server.js
+Restart=always
+RestartSec=2
+
+# Hardening (relax if a feature needs more).
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
