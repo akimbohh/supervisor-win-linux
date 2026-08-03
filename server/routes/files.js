@@ -229,6 +229,13 @@ router.get('/download-zip', handle(async (req, res) => {
 }));
 
 // --- Upload ---
+// Sane, configurable caps (HIGH-4). The old config allowed 10 GB/file x 200
+// files with no total ceiling. Override via env.
+const MB = 1024 * 1024;
+const MAX_FILE_MB = parseInt(process.env.SUPERVISOR_UPLOAD_MAX_FILE_MB || '1024', 10);   // 1 GB/file
+const MAX_FILES = parseInt(process.env.SUPERVISOR_UPLOAD_MAX_FILES || '50', 10);
+const MAX_TOTAL_MB = parseInt(process.env.SUPERVISOR_UPLOAD_MAX_TOTAL_MB || '4096', 10); // 4 GB/request
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -256,12 +263,20 @@ const upload = multer({
       } catch (e) { cb(e); }
     },
   }),
-  limits: { fileSize: 10 * 1024 * 1024 * 1024 }, // 10 GB
+  limits: { fileSize: MAX_FILE_MB * MB, files: MAX_FILES },
 });
 
 router.post('/upload', (req, res, next) => {
-  upload.array('files', 200)(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+  // Total-request ceiling via Content-Length (multer caps per-file + count only).
+  const len = parseInt(req.headers['content-length'] || '0', 10);
+  if (len && len > MAX_TOTAL_MB * MB) {
+    return res.status(413).json({ error: 'Upload exceeds the ' + MAX_TOTAL_MB + ' MB per-request limit' });
+  }
+  upload.array('files', MAX_FILES)(req, res, (err) => {
+    if (err) {
+      const code = err.code === 'LIMIT_FILE_SIZE' ? 413 : (err.code === 'LIMIT_FILE_COUNT' ? 413 : 400);
+      return res.status(code).json({ error: err.message });
+    }
     res.json({ uploaded: (req.files || []).map(f => ({ name: f.filename, size: f.size, path: f.path })) });
   });
 });
