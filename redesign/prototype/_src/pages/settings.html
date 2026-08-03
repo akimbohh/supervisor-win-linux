@@ -1,0 +1,107 @@
+<!--TITLE:Settings-->
+<style>
+.set-wrap{max-width:640px;display:flex;flex-direction:column;gap:14px;}
+.set-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border-soft);min-height:48px;}
+.set-row:last-child{border-bottom:0;}
+.set-row .t{font-size:13.5px;}
+.set-row .s{font-size:11.5px;color:var(--text-3);}
+.acc-sw{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;display:grid;place-items:center;}
+.acc-sw.on{border-color:var(--text);}
+.acc-sw i{width:20px;height:20px;border-radius:50%;display:block;}
+</style>
+<div class="set-wrap">
+  <div class="card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Theme</span></span>
+      <div class="seg" id="theme-seg"><button data-th="dark">Dark</button><button data-th="light">Light</button><button data-th="auto">Auto</button></div></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Accent</span><span class="s">Yours per device — machine identity colors are separate</span></span>
+      <div class="row" style="gap:6px" id="acc-row"></div></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Density</span></span>
+      <div class="seg"><button class="active">Comfortable</button><button>Dense</button></div></div>
+  </div>
+  <div class="section-title">Notifications</div>
+  <div class="card" id="notif-card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Session finished</span><span class="s">Tagged with the machine name on the lock screen</span></span><label class="toggle"><input type="checkbox" checked><span class="knob"></span></label></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Session asks for input</span><span class="s">Sticky — stays until you open it</span></span><label class="toggle"><input type="checkbox" checked><span class="knob"></span></label></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Session error</span></span><label class="toggle"><input type="checkbox" checked><span class="knob"></span></label></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Disk low</span><span class="s">When any drive drops under the threshold</span></span>
+      <input class="input" type="number" value="10" min="1" max="50" style="width:76px;text-align:right" aria-label="Disk threshold percent"><span class="subtle">%</span>
+      <label class="toggle"><input type="checkbox" checked><span class="knob"></span></label></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">This device</span><span class="s">Pixel 9 · subscribed 12d ago</span></span><button class="btn sm">Send test</button><button class="btn ghost sm">Unsubscribe</button></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">joel-laptop</span><span class="s">Chrome · subscribed 3d ago</span></span><button class="btn ghost sm">Unsubscribe</button></div>
+  </div>
+  <div class="section-title">Pinned folders</div>
+  <div class="card">
+    <div class="set-row"><span class="mono t truncate" style="flex:1;font-size:12px">C:\code\supervisor</span>
+      <button class="btn ghost sm icon" aria-label="Move up" disabled></button><button class="btn ghost sm icon" aria-label="Move down" data-i="dn"></button><button class="btn ghost sm icon" aria-label="Remove" data-i="x"></button></div>
+    <div class="set-row"><span class="mono t truncate" style="flex:1;font-size:12px">C:\code\acme-api</span>
+      <button class="btn ghost sm icon" aria-label="Move up" data-i="up"></button><button class="btn ghost sm icon" aria-label="Move down" disabled></button><button class="btn ghost sm icon" aria-label="Remove" data-i="x"></button></div>
+    <div class="set-row"><button class="btn ghost sm" id="pin-add">Add folder</button></div>
+  </div>
+  <div class="section-title">Sessions</div>
+  <div class="card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Auto-trust folders</span><span class="s">Answer Claude Code's folder-trust prompt automatically</span></span><label class="toggle"><input type="checkbox" checked><span class="knob"></span></label></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Presets</span><span class="s">4 saved — edit them on the Sessions tab</span></span><a href="sessions.html" style="font-size:12.5px">Open Sessions</a></div>
+  </div>
+  <div class="section-title">Files</div>
+  <div class="card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Show hidden files</span></span><label class="toggle"><input type="checkbox"><span class="knob"></span></label></div>
+    <div class="set-row" style="align-items:flex-start;flex-direction:column;gap:8px">
+      <span class="col" style="gap:1px"><span class="t">Path blocklist</span><span class="s">Reads and writes inside these paths are refused</span></span>
+      <textarea class="textarea" style="min-height:96px" spellcheck="false">C:\Windows
+C:\Program Files\Windows Defender
+C:\$Recycle.Bin
+C:\System Volume Information
+C:\PerfLogs</textarea>
+      <div class="row" style="width:100%"><button class="btn sm primary">Save blocklist</button><button class="btn ghost sm">Reset to defaults</button><span class="spacer"></span><span class="s" id="bl-warn" style="color:var(--warn)"></span></div>
+    </div>
+  </div>
+  <div class="section-title">Account</div>
+  <div class="card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Change password</span><span class="s">for helios only</span></span><button class="btn sm">Change…</button></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Sign out</span><span class="s">This device, this machine</span></span><button class="btn sm danger">Sign out</button></div>
+  </div>
+  <div class="section-title">Maintenance</div>
+  <div class="card">
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Request a change</span><span class="s">Opens an interactive Claude session in the Supervisor repo, pre-filled with your request</span></span><span class="kbd">?</span></div>
+    <div class="set-row"><span class="col" style="gap:1px;flex:1"><span class="t">Repo path</span></span><input class="input mono" style="max-width:260px;font-size:12px" value="C:\code\supervisor"></div>
+  </div>
+  <div class="section-title">Keyboard shortcuts</div>
+  <div class="card" style="padding:6px 14px">
+    <div class="set-row" style="min-height:38px"><span class="t" style="flex:1">Jump to tab</span><span><span class="kbd">g</span> then <span class="kbd">s</span> <span class="kbd">f</span> <span class="kbd">c</span> <span class="kbd">p</span> <span class="kbd">y</span> <span class="kbd">t</span></span></div>
+    <div class="set-row" style="min-height:38px"><span class="t" style="flex:1">Request a change</span><span class="kbd">?</span></div>
+    <div class="set-row" style="min-height:38px"><span class="t" style="flex:1">Close topmost dialog</span><span class="kbd">Esc</span></div>
+    <div class="set-row" style="min-height:38px"><span class="t" style="flex:1">Save in editor</span><span><span class="kbd">Ctrl</span>+<span class="kbd">S</span></span></div>
+  </div>
+  <div class="section-title">Backup</div>
+  <div class="card">
+    <div class="set-row"><span class="t" style="flex:1">Settings, presets, pins, quick keys</span><button class="btn sm">Export</button><button class="btn sm">Import</button><button class="btn ghost sm danger">Reset all</button></div>
+  </div>
+  <div class="section-title">About</div>
+  <div class="card">
+    <div class="set-row" style="min-height:38px"><span class="s" style="flex:1">Machine</span><span class="mono t" style="font-size:12px">helios · Windows 11 · up 11d 4h</span></div>
+    <div class="set-row" style="min-height:38px"><span class="s" style="flex:1">Version</span><span class="mono t" style="font-size:12px">1.6.0</span></div>
+    <div class="set-row" style="min-height:38px"><span class="s" style="flex:1">Cache</span><button class="btn ghost sm">Force refresh — clear cache</button></div>
+  </div>
+</div>
+<!--PAGEJS-->
+<script>
+/* theme + accent are LIVE in the prototype */
+const seg=document.getElementById('theme-seg');
+function syncTheme(){const t=localStorage.getItem('proto-theme')||'dark';
+  seg.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.th===t));}
+seg.querySelectorAll('button').forEach(b=>b.onclick=()=>{localStorage.setItem('proto-theme',b.dataset.th==='auto'?'dark':b.dataset.th);applyPrefs();syncTheme();});
+syncTheme();
+const ACC={amber:'#f5a623',teal:'#2dd4bf',purple:'#a78bfa',blue:'#5ea8ff',rose:'#fb7185'};
+const ar=document.getElementById('acc-row');
+function syncAcc(){const cur=localStorage.getItem('proto-accent')||'amber';
+  ar.innerHTML=Object.entries(ACC).map(([k,c])=>'<button class="acc-sw'+(k===cur?' on':'')+'" data-ac="'+k+'" aria-label="'+k+' accent'+(k===cur?' (selected)':'')+'"><i style="background:'+c+'"></i></button>').join('');
+  ar.querySelectorAll('button').forEach(b=>b.onclick=()=>{localStorage.setItem('proto-accent',b.dataset.ac);applyPrefs();syncAcc();});}
+syncAcc();
+/* pinned folder buttons */
+document.querySelectorAll('[data-i]').forEach(b=>{b.innerHTML=I(b.dataset.i==='x'?'x':b.dataset.i==='up'?'arrow-up':'arrow-down',14);});
+document.querySelectorAll('[aria-label="Move up"][disabled],[aria-label="Move down"][disabled]').forEach(b=>{b.innerHTML=I(b.getAttribute('aria-label')==='Move up'?'arrow-up':'arrow-down',14);});
+document.getElementById('pin-add').insertAdjacentHTML('afterbegin',I('plus',14));
+/* blocklist guard */
+const bl=document.querySelector('.textarea');
+bl.addEventListener('input',()=>{document.getElementById('bl-warn').textContent=bl.value.trim()===''?'Empty list disables all path protection':'';});
+</script>

@@ -1,0 +1,134 @@
+<!--TITLE:Console-->
+<style>
+.con-wrap{display:flex;flex-direction:column;height:100%;min-height:0;gap:0;}
+.term-tabs{display:flex;gap:4px;align-items:center;overflow-x:auto;scrollbar-width:none;padding-bottom:8px;}
+.term-tabs::-webkit-scrollbar{display:none;}
+.term-tab{display:inline-flex;align-items:center;gap:7px;padding:8px 10px 8px 12px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface-1);font-size:12.5px;color:var(--text-2);white-space:nowrap;cursor:pointer;min-height:38px;}
+.term-tab.active{background:var(--surface-2);color:var(--text);border-color:var(--border-strong);}
+.term-tab .d{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;}
+.term-tab.dead .d{background:var(--text-4);}
+.term-tab .x{color:var(--text-3);display:grid;place-items:center;width:20px;height:20px;border-radius:4px;}
+.term-tab .x:hover{background:var(--surface-3);color:var(--text);}
+.deg-strip{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;color:var(--warn);background:var(--warn-soft);border:1px solid color-mix(in oklab,var(--warn) 30%,transparent);border-bottom:0;border-radius:var(--r) var(--r) 0 0;}
+.term{flex:1;min-height:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);font-family:var(--mono);font-size:12.5px;line-height:1.5;padding:10px 12px;overflow:auto;white-space:pre-wrap;word-break:break-word;}
+.deg .term{border-radius:0 0 var(--r) var(--r);}
+.term .cursor{display:inline-block;width:7px;height:14px;background:var(--accent);vertical-align:-2px;animation:blink 1.1s steps(1) infinite;}
+@keyframes blink{50%{opacity:0;}}
+.qk-row{display:flex;gap:5px;padding:8px 0 2px;overflow-x:auto;scrollbar-width:none;align-items:center;}
+.qk-row::-webkit-scrollbar{display:none;}
+.qk{min-width:44px;min-height:44px;padding:0 12px;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r);font-family:var(--mono);font-size:12.5px;color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex-shrink:0;user-select:none;}
+.qk:active{background:var(--surface-3);}
+.qk svg{width:14px;height:14px;}
+.qk.armed{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:600;animation:armpulse 1.4s var(--ease) infinite;}
+@keyframes armpulse{50%{box-shadow:0 0 0 4px var(--accent-soft);}}
+.qk.wide{color:var(--text);}
+</style>
+<div class="con-wrap deg" id="con">
+  <div class="term-tabs" id="ttabs"></div>
+  <div class="deg-strip" id="degstrip">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span><b>degraded</b> · no PTY — no color, no resize, no interactive prompts</span>
+    <span class="spacer"></span><button class="btn ghost sm" id="deg-why">Why?</button>
+  </div>
+  <div class="term" id="term" tabindex="0" aria-label="Terminal"></div>
+  <div class="qk-row" id="qkrow" aria-label="Quick keys"></div>
+</div>
+<!--PAGEJS-->
+<script>
+document.querySelector('.app-main').style.display='flex';
+document.querySelector('.app-main').style.flexDirection='column';
+/* Tabs */
+const TABS=[{n:'supervisor',alive:true,pty:true},{n:'deploy',alive:true,pty:false},{n:'scratch',alive:false,pty:true}];
+let curTab=1;
+function renderTabs(){
+  document.getElementById('ttabs').innerHTML=TABS.map((t,i)=>
+   '<span class="term-tab'+(i===curTab?' active':'')+(t.alive?'':' dead')+'" data-t="'+i+'" role="tab" aria-selected="'+(i===curTab)+'"><span class="d"></span>'+t.n+
+   (t.pty?'':'<span class="st degraded" style="height:18px;padding:0 6px;font-size:9.5px">'+I('warning',11)+'no PTY</span>')+
+   '<button class="x" data-x="'+i+'" aria-label="Close '+t.n+'">'+I('x',13)+'</button>'+
+   '<button class="x" data-r="'+i+'" aria-label="Rename '+t.n+'">'+I('edit',12)+'</button></span>').join('')+
+   '<button class="btn ghost sm" id="t-new" style="flex-shrink:0">'+I('plus',15)+'New shell</button>';
+  document.getElementById('degstrip').style.display=TABS[curTab].pty?'none':'flex';
+  document.getElementById('con').classList.toggle('deg',!TABS[curTab].pty);
+  document.getElementById('ttabs').querySelectorAll('[data-t]').forEach(el=>el.onclick=e=>{if(e.target.closest('[data-x],[data-r]'))return;curTab=+el.dataset.t;renderTabs();});
+  document.getElementById('ttabs').querySelectorAll('[data-x]').forEach(el=>el.onclick=()=>confirmModal({title:'Close shell?',body:'<span class="mono">'+TABS[el.dataset.x].n+'</span> and its scrollback will be discarded.',okLabel:'Close shell',danger:true,machine:false}).then(ok=>{if(ok){TABS.splice(el.dataset.x,1);curTab=Math.min(curTab,TABS.length-1);renderTabs();}}));
+  document.getElementById('ttabs').querySelectorAll('[data-r]').forEach(el=>el.onclick=()=>{
+    const bd=openModal('<div class="modal-header"><h2>Rename shell</h2></div><div class="modal-body"><div class="field"><label>Name</label><input class="input" value="'+TABS[el.dataset.r].n+'"></div></div>'+
+    '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary" data-a="ok">Rename</button></div>');
+    bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+    bd.querySelector('[data-a=ok]').onclick=()=>{TABS[el.dataset.r].n=bd.querySelector('input').value;closeModal(bd);renderTabs();};});
+  const tn=document.getElementById('t-new');if(tn)tn.onclick=()=>{TABS.push({n:'shell '+(TABS.length+1),alive:true,pty:true});curTab=TABS.length-1;renderTabs();};
+}
+renderTabs();
+/* Terminal mock */
+const term=document.getElementById('term');
+const SCROLLBACK=['joel@verdant:~/apps/acme$ git pull','Updating 8f31c2e..73a8b13','Fast-forward',' server/lib/metrics.js | 41 ++++++++---',' web/styles.css        | 118 +++++++++++++------------',' 2 files changed, 96 insertions(+), 63 deletions(-)','joel@verdant:~/apps/acme$ pm2 restart acme-api','[PM2] Applying action restartProcessId on app [acme-api](ids: [ 0 ])','[PM2] [acme-api](0) ✓','joel@verdant:~/apps/acme$ pm2 logs acme-api --lines 3','0|acme-api | 18:41:07 GET /api/health 200 3ms','0|acme-api | 18:41:22 POST /api/webhooks/stripe 200 41ms','0|acme-api | 18:42:00 GET /api/orders?after=2026-08-01 200 88ms'];
+term.textContent=SCROLLBACK.join('\n')+'\n';
+const cur=document.createElement('span');
+const prompt=document.createElement('span');prompt.textContent='joel@verdant:~/apps/acme$ ';
+const typed=document.createElement('span');
+cur.className='cursor';
+term.appendChild(prompt);term.appendChild(typed);term.appendChild(cur);
+term.scrollTop=term.scrollHeight;
+let ctrlArmed=false;
+function feedKey(label){
+  if(ctrlArmed){typed.textContent+='^'+label.toUpperCase();disarm();return;}
+  if(label==='Enter'){term.insertBefore(document.createTextNode(prompt.textContent+typed.textContent+'\n'),prompt);typed.textContent='';}
+  else if(label==='Esc'||label==='Tab')typed.textContent+='';
+  else typed.textContent+=label;
+  term.scrollTop=term.scrollHeight;}
+/* Quick keys — 6 kinds */
+const QK=[
+ {k:'esc',label:'Esc',t:'key'},{k:'tab',label:'Tab',t:'key'},
+ {k:'ctrl',label:'Ctrl',t:'ctrl-toggle'},
+ {k:'up',label:'↑',t:'key'},{k:'down',label:'↓',t:'key'},
+ {k:'pipe',label:'|',t:'key'},{k:'tilde',label:'~',t:'key'},{k:'slash',label:'/',t:'key'},
+ {k:'cd',label:'cd ~/apps/acme',t:'cd'},
+ {k:'script',label:'deploy.sh',t:'script'},
+ {k:'claude',label:'Send to Claude',t:'send-claude'},
+ {k:'paste',label:'Paste',t:'paste'},
+];
+const qkIcon={cd:'folder',script:'file-text','send-claude':'rocket',paste:'copy'};
+function renderQK(){
+  document.getElementById('qkrow').innerHTML=QK.map((q,i)=>
+   '<button class="qk'+(q.t==='ctrl-toggle'&&ctrlArmed?' armed':'')+(q.t!=='key'&&q.t!=='ctrl-toggle'?' wide':'')+'" data-q="'+i+'" aria-label="'+q.label+(q.t==='ctrl-toggle'?(ctrlArmed?' — armed, next key gets Ctrl':' — tap to arm Ctrl'):'')+'" aria-pressed="'+(q.t==='ctrl-toggle'?ctrlArmed:'')+'">'+
+   (qkIcon[q.t]?I(qkIcon[q.t],14):'')+q.label+'</button>').join('')+
+   '<button class="qk" id="qk-add" aria-label="Add quick key">'+I('plus',16)+'</button>';
+  document.querySelectorAll('[data-q]').forEach(b=>{
+    const q=QK[b.dataset.q];
+    b.onclick=()=>{
+      if(q.t==='ctrl-toggle'){ctrlArmed=!ctrlArmed;renderQK();return;}
+      if(q.t==='key')feedKey(q.label==='↑'?'':q.label.length===1?q.label:q.label==='Esc'?'Esc':'');
+      if(q.t==='cd'){typed.textContent='cd ~/apps/acme';feedKey('Enter');}
+      if(q.t==='script'){term.insertBefore(document.createTextNode(prompt.textContent+'./deploy.sh\nBuilding… ok\nSyncing to verdant… ok\nDeployed 73a8b13 in 41s\n'),prompt);term.scrollTop=term.scrollHeight;}
+      if(q.t==='send-claude'){toast('success','Last 2000 chars sent — opening a Claude session pre-filled');}
+      if(q.t==='paste'){typed.textContent+='npm run lint';}
+      if(ctrlArmed&&q.t==='key')disarm();
+    };
+    /* long-press = edit/remove, same menu on right-click for pointer+keyboard parity */
+    let t;b.onpointerdown=()=>{t=setTimeout(()=>qkMenu(q),500);};
+    b.onpointerup=b.onpointerleave=()=>clearTimeout(t);
+    b.oncontextmenu=e=>{e.preventDefault();qkMenu(q);};
+  });
+  document.getElementById('qk-add').onclick=openKeyPicker;
+}
+function disarm(){ctrlArmed=false;renderQK();}
+function qkMenu(q){
+  const bd=openSheet('<div class="sheet-body"><div class="section-title">'+q.label+' · '+q.t+'</div><div class="col" style="gap:1px">'+
+  '<button class="side-item">'+I('edit',15)+'Edit key</button><button class="side-item" style="color:var(--danger)">'+I('trash',15)+'Remove key</button></div>'+
+  '<p class="subtle" style="margin:10px 10px 0">Also opened by long-press or right-click on the key.</p></div>');
+  bd._sheet.querySelectorAll('.side-item').forEach(x=>x.onclick=()=>closeModal(bd));
+}
+function openKeyPicker(){
+  const PRESETGRID=['Esc','Tab','Ctrl','←','↓','↑','→','|','~','/','\\','"','\'','$','&','*','#','^C','^D','^L','^R','Claude','Paste'];
+  const bd=openModal('<div class="modal-header"><h2>Add quick key</h2></div>'+
+  '<div class="modal-body" style="gap:10px"><div class="seg" role="tablist" style="align-self:flex-start"><button class="active">Presets</button><button>cd path</button><button>Script</button></div>'+
+  '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));gap:6px">'+
+   PRESETGRID.map(k=>'<button class="qk" style="width:100%">'+k+'</button>').join('')+'</div>'+
+  '<p class="subtle" style="margin:0">Keys sync across your devices. cd paths and scripts get their own builder in the next tabs.</p></div>'+
+  '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary" data-a="ok">Add key</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('[data-a=ok]').onclick=()=>{closeModal(bd);toast('success','Key added and synced');};
+}
+renderQK();
+document.getElementById('deg-why').onclick=()=>openModal((()=>{return '<div class="modal-header"><h2>Degraded shell</h2></div><div class="modal-body"><p style="margin:0;font-size:13px;color:var(--text-2)">node-pty isn\'t installed on <span class="mono" style="color:var(--machine-ink)">verdant</span>, so this shell runs through a plain pipe. Output still streams and commands still run, but there is no color, no terminal resize, and interactive prompts (like <span class="mono">y/n</span>) may not render until you press Enter.</p><p style="margin:0;font-size:13px;color:var(--text-2)">To fix: <span class="mono">npm rebuild node-pty</span> on the host, then restart Supervisor.</p></div><div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>';})());
+</script>

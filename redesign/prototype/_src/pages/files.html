@@ -1,0 +1,226 @@
+<!--TITLE:Files-->
+<style>
+.files-layout{display:grid;grid-template-columns:1fr;gap:14px;height:100%;min-height:0;}
+@media(min-width:1024px){.files-layout{grid-template-columns:200px minmax(0,1fr) 340px;align-items:start;}}
+.f-side{display:none;}
+@media(min-width:1024px){.f-side{display:block;position:sticky;top:0;}}
+.f-bar{display:flex;align-items:center;gap:6px;min-height:44px;margin-bottom:10px;}
+.crumb-strip{display:flex;align-items:center;gap:2px;flex:1;min-width:0;font-size:13px;overflow:hidden;}
+.crumb-strip .crumb{padding:6px 7px;border-radius:6px;color:var(--text-2);cursor:pointer;white-space:nowrap;}
+.crumb-strip .crumb:hover{background:var(--surface-2);color:var(--text);}
+.crumb-strip .crumb.cur{color:var(--text);font-weight:600;}
+.crumb-strip .sep{color:var(--text-4);user-select:none;}
+.f-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 12px;border-radius:var(--r);cursor:pointer;min-height:44px;user-select:none;}
+.f-row:hover{background:var(--surface-2);}
+.f-row.sel{background:var(--accent-soft);}
+.f-row .fi{color:var(--text-2);display:grid;place-items:center;}
+.f-row.dir .fi{color:var(--accent-text);}
+.f-row .meta{font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.f-row .ck{width:20px;height:20px;border:1.5px solid var(--border-strong);border-radius:5px;display:none;place-items:center;background:var(--surface-1);}
+.selmode .f-row .ck{display:grid;}
+.selmode .f-row .fi{display:none;}
+.f-row.sel .ck{background:var(--accent);border-color:var(--accent);}
+.f-row.sel .ck::after{content:'';width:9px;height:5px;border-left:2px solid var(--accent-on);border-bottom:2px solid var(--accent-on);transform:rotate(-45deg) translate(1px,-1px);}
+.selbar{position:sticky;bottom:0;display:flex;gap:4px;align-items:center;padding:8px 10px;background:color-mix(in oklab,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-top:1px solid var(--border);margin:0 -14px -16px;z-index:5;overflow-x:auto;scrollbar-width:none;}
+.side-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--r);font-size:13px;color:var(--text-2);cursor:pointer;min-height:36px;width:100%;text-align:left;}
+.side-item:hover{background:var(--surface-2);color:var(--text);}
+.side-item svg{width:15px;height:15px;color:var(--text-3);}
+.md-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);padding:0 8px;}
+.md-tabs button{padding:8px 10px;font-size:12px;color:var(--text-2);border-bottom:2px solid transparent;margin-bottom:-1px;}
+.md-tabs button.active{color:var(--accent-text);border-bottom-color:var(--accent);}
+.prev-body{font-size:13px;line-height:1.55;padding:12px 14px;overflow:auto;max-height:46vh;}
+.prev-body h3{font-size:14px;margin:0 0 6px;}
+.prev-body code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;}
+.prev-body pre{font-family:var(--mono);font-size:11.5px;background:var(--bg);border:1px solid var(--border-soft);border-radius:var(--r-sm);padding:8px 10px;overflow:auto;}
+</style>
+<div class="files-layout">
+  <aside class="f-side" aria-label="Locations">
+    <div class="section-title">Locations</div>
+    <div class="col" style="gap:1px" id="side-loc"></div>
+    <div class="section-title">Pinned</div>
+    <div class="col" style="gap:1px" id="side-pin"></div>
+    <div class="section-title">Recent</div>
+    <div class="col" style="gap:1px" id="side-rec"></div>
+    <div class="col" style="gap:1px;margin-top:14px">
+      <button class="side-item" id="trash-btn2"></button>
+    </div>
+  </aside>
+  <section style="min-width:0;display:flex;flex-direction:column;min-height:0">
+    <div class="f-bar">
+      <button class="btn ghost icon" id="loc-btn" aria-label="Locations" style="display:grid"></button>
+      <div class="crumb-strip" id="crumbs"></div>
+      <button class="btn ghost icon" id="f-search-btn" aria-label="Filter files"></button>
+      <button class="btn ghost icon" id="f-new" aria-label="New…"></button>
+      <button class="btn ghost icon" id="f-more" aria-label="More"></button>
+    </div>
+    <div class="search-wrap hidden" id="f-search-row" style="margin-bottom:10px"><input class="input" id="f-filter" type="search" placeholder="Filter this folder (fuzzy)" aria-label="Filter files"></div>
+    <div class="card"><div class="list" id="f-list"></div></div>
+    <p class="subtle" style="margin:8px 2px">Long-press or <span class="kbd">Ctrl</span>+click to select · watching for changes</p>
+    <div class="selbar hidden" id="selbar"></div>
+    <div class="selbar hidden" id="clipbar"></div>
+  </section>
+  <aside id="prev-col" style="min-width:0"></aside>
+</div>
+<!--PAGEJS-->
+<script>
+const FILES=[
+ {n:'..',dir:true,up:true},
+ {n:'.claude',dir:true,mod:'2d'},
+ {n:'docs',dir:true,mod:'4h'},
+ {n:'server',dir:true,mod:'3d'},
+ {n:'web',dir:true,mod:'1h'},
+ {n:'web.new',dir:true,mod:'6d'},
+ {n:'build.js',k:'code',size:'2.8 KB',mod:'12d'},
+ {n:'package.json',k:'code',size:'945 B',mod:'12d'},
+ {n:'README.md',k:'md',size:'9.1 KB',mod:'4h'},
+ {n:'SUPERVISOR-DESIGN-PROMPT.md',k:'md',size:'24.6 KB',mod:'2d'},
+ {n:'supervisor.log',k:'text',size:'1.2 MB',mod:'2m'},
+ {n:'screenshot-2026-08-01.png',k:'img',size:'412 KB',mod:'2d'},
+];
+const KI={md:'file-text',code:'file-text',text:'file-text',img:'image',zip:'archive'};
+const listEl=document.getElementById('f-list');
+let selMode=false,sel=new Set(),clip=null;
+function renderFiles(filter){
+  const q=(filter||'').toLowerCase();
+  listEl.parentElement.classList.toggle('selmode',selMode);
+  const rows=FILES.filter(f=>!q||fuzzy(f.n.toLowerCase(),q)).map((f,i)=>{
+    if(f.up)return '<div class="f-row dir" data-i="'+i+'"><span class="fi">'+I('arrow-up',16)+'</span><span class="muted">..</span><span></span><span></span></div>';
+    return '<div class="f-row'+(f.dir?' dir':'')+(sel.has(f.n)?' sel':'')+'" data-i="'+i+'" data-n="'+f.n+'">'+
+    '<span class="ck" aria-hidden="true"></span><span class="fi">'+I(f.dir?'folder':(KI[f.k]||'file-text'),17)+'</span>'+
+    '<span class="truncate" style="font-size:13.5px">'+f.n+'</span>'+
+    '<span class="meta">'+(f.size||'')+'</span><span class="meta">'+f.mod+'</span></div>';});
+  listEl.innerHTML=rows.join('')||'<div class="empty">'+I('search',30)+'<h3>Nothing matches</h3><p>No file in C:\\code\\supervisor matches “'+(filter||'')+'”.</p><button class="btn" onclick="document.getElementById(\'f-filter\').value=\'\';renderFiles()">Clear filter</button></div>';
+}
+function fuzzy(s,q){let i=0;for(const c of s){if(c===q[i])i++;if(i===q.length)return true;}return false;}
+/* crumbs */
+document.getElementById('crumbs').innerHTML='<span class="crumb mono" style="font-size:12px">C:\\</span><span class="sep">›</span><span class="crumb">code</span><span class="sep">›</span><span class="crumb cur">supervisor</span>';
+/* bar icons */
+document.getElementById('loc-btn').innerHTML=I('hard-drive',17);
+document.getElementById('f-search-btn').innerHTML=I('search',17);
+document.getElementById('f-new').innerHTML=I('plus',18);
+document.getElementById('f-more').innerHTML=I('kebab',17);
+document.getElementById('f-search-btn').onclick=()=>{const r=document.getElementById('f-search-row');r.classList.toggle('hidden');if(!r.classList.contains('hidden'))r.querySelector('input').focus();};
+document.getElementById('f-filter').addEventListener('input',e=>renderFiles(e.target.value));
+/* sidebar */
+const LOC=[['home','Home'],['monitor','Desktop'],['file-text','Documents'],['download','Downloads'],['hard-drive','C:\\'],['hard-drive','D:\\']];
+document.getElementById('side-loc').innerHTML=LOC.map(([i,n])=>'<button class="side-item">'+I(i,15)+n+'</button>').join('');
+document.getElementById('side-pin').innerHTML=[['C:\\code\\supervisor','supervisor'],['C:\\code\\acme-api','acme-api']].map(([p,n])=>'<button class="side-item" title="'+p+'">'+I('pin',15)+n+'</button>').join('');
+document.getElementById('side-rec').innerHTML=['web','docs\\design','acme-api\\src'].map(n=>'<button class="side-item">'+I('folder',15)+n+'</button>').join('');
+document.getElementById('trash-btn2').innerHTML=I('trash',15)+'Trash <span class="subtle" style="margin-left:auto">3</span>';
+document.getElementById('trash-btn2').onclick=openTrash;
+document.getElementById('loc-btn').onclick=()=>{
+  const bd=openSheet('<div class="sheet-body"><div class="section-title">Locations</div><div class="col" style="gap:1px">'+LOC.map(([i,n])=>'<button class="side-item">'+I(i,15)+n+'</button>').join('')+'</div>'+
+  '<div class="section-title">Pinned</div><div class="col" style="gap:1px"><button class="side-item">'+I('pin',15)+'supervisor</button><button class="side-item">'+I('pin',15)+'acme-api</button></div>'+
+  '<div class="col" style="gap:1px;margin-top:12px"><button class="side-item" id="t2">'+I('trash',15)+'Trash <span class="subtle" style="margin-left:auto">3</span></button></div></div>');
+  bd._sheet.querySelector('#t2').onclick=()=>{closeModal(bd);openTrash();};
+};
+/* + create menu */
+document.getElementById('f-new').onclick=()=>{
+  const items=[['folder','Folder'],['file-text','Text file'],['file-text','Markdown'],['file-text','JavaScript'],['file-text','JSON'],['upload','Upload files…']];
+  const bd=openSheet('<div class="sheet-body"><div class="section-title">New in supervisor</div><div class="col" style="gap:1px">'+items.map(([i,n])=>'<button class="side-item">'+I(i,15)+n+'</button>').join('')+'</div></div>');
+  bd._sheet.querySelectorAll('.side-item').forEach(b=>b.onclick=()=>{closeModal(bd);toast('success',b.textContent.trim()+' — created');});
+};
+/* ⋯ folder menu */
+document.getElementById('f-more').onclick=()=>{
+  const bd=openSheet('<div class="sheet-body"><div class="col" style="gap:1px">'+
+   '<button class="side-item" id="fm-sel">'+I('check',15)+'Select files</button>'+
+   '<button class="side-item" id="fm-sort">'+I('sort',15)+'Sort — name ↑ <span class="subtle" style="margin-left:auto">per-folder</span></button>'+
+   '<button class="side-item">'+I('grid',15)+'Grid view</button>'+
+   '<button class="side-item">'+I('terminal',15)+'Open in Console</button>'+
+   '<button class="side-item">'+I('rocket',15)+'Open in Claude</button>'+
+   '<button class="side-item">'+I('pin',15)+'Pin this folder</button>'+
+   '<button class="side-item">'+I('eye',15)+'Show hidden files</button>'+
+   '<button class="side-item">'+I('refresh',15)+'Refresh</button></div></div>');
+  bd._sheet.querySelector('#fm-sel').onclick=()=>{closeModal(bd);enterSel();};
+  bd._sheet.querySelector('#fm-sort').onclick=()=>{closeModal(bd);openSort();};
+};
+function openSort(){
+  const bd=openSheet('<div class="sheet-body"><div class="section-title">Sort supervisor</div><div class="col" style="gap:1px">'+
+  ['Name','Size','Modified','Type'].map((n,i)=>'<button class="side-item">'+(i===0?I('check',15):'<span style="width:15px"></span>')+n+'</button>').join('')+
+  '</div><div class="row" style="margin-top:10px;padding:0 10px"><span class="subtle">Direction</span><span class="spacer"></span><div class="seg"><button class="active">A→Z</button><button>Z→A</button></div></div>'+
+  '<p class="subtle" style="margin:10px 10px 0">Remembered for this folder.</p></div>');
+}
+/* selection */
+function enterSel(){selMode=true;renderFiles(document.getElementById('f-filter').value);updateSelbar();}
+function exitSel(){selMode=false;sel.clear();renderFiles(document.getElementById('f-filter').value);updateSelbar();}
+function updateSelbar(){
+  const bar=document.getElementById('selbar');
+  if(!selMode||sel.size===0){bar.classList.add('hidden');}
+  else{bar.classList.remove('hidden');
+    bar.innerHTML='<span style="font-size:12px;font-weight:600;padding:0 6px;white-space:nowrap">'+sel.size+' selected</span>'+
+    [['scissors','Cut'],['copy','Copy'],['move','Move'],['archive','Zip'],['download','Download'],['edit','Rename'],['trash','Delete']].map(([i,n])=>
+     '<button class="btn ghost sm" data-sa="'+n+'"'+(n==='Rename'&&sel.size>1?' disabled title="Rename works on a single item"':'')+'>'+I(i==='move'?'arrow-up':i,14)+n+'</button>').join('')+
+    '<span class="spacer"></span><button class="btn ghost sm" data-sa="Cancel">Cancel</button>';
+    bar.querySelectorAll('[data-sa]').forEach(b=>b.onclick=()=>{
+      const a=b.dataset.sa;
+      if(a==='Cancel')return exitSel();
+      if(a==='Cut'||a==='Copy'){clip={mode:a,n:sel.size};exitSel();updateClipbar();return;}
+      if(a==='Delete')return confirmModal({title:'Delete '+sel.size+' items?',body:'They move to Supervisor\'s trash on <span class="mono">helios</span>, not the OS recycle bin. Restorable until the trash is emptied.',okLabel:'Move to trash',danger:true}).then(ok=>{if(ok){toast('success',sel.size+' items trashed');exitSel();}});
+      toast('info',a+' — mocked');});
+  }
+  updateClipbar();
+}
+function updateClipbar(){
+  const bar=document.getElementById('clipbar');
+  if(!clip||selMode&&sel.size){bar.classList.add('hidden');return;}
+  if(!clip){bar.classList.add('hidden');return;}
+  bar.classList.remove('hidden');
+  bar.innerHTML='<span style="font-size:12px;padding:0 6px">'+I(clip.mode==='Cut'?'scissors':'copy',13)+' '+clip.mode+': <b>'+clip.n+'</b></span>'+
+   '<button class="btn sm primary">Paste here</button><span class="spacer"></span><button class="btn ghost sm" id="clip-x">Clear</button>';
+  bar.querySelector('.primary').onclick=()=>{toast('success','Pasted '+clip.n+' items into supervisor');if(clip.mode==='Cut')clip=null;updateClipbar();};
+  bar.querySelector('#clip-x').onclick=()=>{clip=null;updateClipbar();};
+}
+/* row interaction: click select/preview, ctrl+click or long-press = selection */
+let lpT=null,lpMoved=false;
+listEl.addEventListener('pointerdown',e=>{const r=e.target.closest('.f-row');if(!r||r.classList.contains('dir'))return;
+  lpMoved=false;const sx=e.clientX,sy=e.clientY;
+  const mv=ev=>{if(Math.hypot(ev.clientX-sx,ev.clientY-sy)>8){lpMoved=true;clearTimeout(lpT);}};
+  listEl.addEventListener('pointermove',mv,{once:false});
+  lpT=setTimeout(()=>{listEl.removeEventListener('pointermove',mv);if(!lpMoved){navigator.vibrate&&navigator.vibrate(20);enterSel();toggleSel(r);}},500);
+  listEl.addEventListener('pointerup',()=>{clearTimeout(lpT);listEl.removeEventListener('pointermove',mv);},{once:true});});
+function toggleSel(r){const n=r.dataset.n;if(sel.has(n))sel.delete(n);else sel.add(n);
+  r.classList.toggle('sel');updateSelbar();if(sel.size===0)exitSel();}
+listEl.addEventListener('click',e=>{
+  const r=e.target.closest('.f-row');if(!r)return;
+  const f=FILES[r.dataset.i];
+  if(selMode){if(!f.dir&&!f.up)toggleSel(r);return;}
+  if(e.ctrlKey||e.metaKey){if(!f.dir&&!f.up){enterSel();toggleSel(r);}return;}
+  if(f.dir){toast('info',(f.up?'Up to C:\\code':'Opening '+f.n)+' — navigation mocked');return;}
+  openPreview(f);});
+/* preview */
+const MD_PREVIEW='<h3>Supervisor</h3><p>A personal remote control panel for a Windows PC, accessed from a phone over Tailscale.</p><p>It\'s:</p><p><b>Sessions</b> — a Claude Code session manager. Spawn <code>claude rc</code> in any folder, watch the live log from your phone…</p><pre>npm install\nnpm start</pre>';
+function previewHTML(f){
+  const tabs=f.k==='md'?'<div class="md-tabs"><button class="active">Preview</button><button>Raw</button><button>Edit</button></div>':f.k==='text'?'<div class="md-tabs"><button class="active">View</button><button>Edit</button></div>':'';
+  const body=f.k==='md'?'<div class="prev-body">'+MD_PREVIEW+'</div>'
+   :f.k==='img'?'<div style="padding:14px;display:grid;place-items:center"><div style="width:100%;aspect-ratio:16/10;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);display:grid;place-items:center;color:var(--text-3)">'+I('image',28)+'</div></div>'
+   :f.k==='code'?'<div class="prev-body"><pre>const { execSync } = require(\'child_process\');\nconst fs = require(\'fs\');\n\n// Copy vendor bundles into web/vendor at install time.\nconst COPIES = [\n  [\'codemirror/lib/codemirror.js\', \'codemirror/\'],\n  [\'xterm/lib/xterm.js\', \'xterm/\'],\n];</pre></div>'
+   :'<div class="prev-body"><pre>18:44:06 [sessions] #1 spawn claude rc in C:\\code\\supervisor\n18:44:09 [ws] client subscribed session:1\n18:46:12 [files] watcher started C:\\code\\supervisor\n18:51:33 [push] session-finished → 2 devices</pre><p class="subtle" style="margin:4px 2px">Showing last 4 KB of 1.2 MB — download for the full file.</p></div>';
+  return '<div class="card"><div class="row" style="padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface-2)">'+
+   I(f.k==='img'?'image':'file-text',16)+'<span class="truncate" style="font-weight:600;font-size:13px;flex:1">'+f.n+'</span><span class="subtle">'+f.size+'</span></div>'+
+   '<div class="row" style="padding:6px 8px;border-bottom:1px solid var(--border-soft);gap:2px">'+
+    '<button class="btn ghost sm icon" aria-label="Download">'+I('download',14)+'</button>'+
+    '<button class="btn ghost sm icon" aria-label="Rename">'+I('edit',14)+'</button>'+
+    '<button class="btn ghost sm icon" aria-label="Copy path">'+I('copy',14)+'</button>'+
+    '<span class="spacer"></span><button class="btn ghost sm icon" aria-label="Delete" style="color:var(--danger)">'+I('trash',14)+'</button></div>'+
+   tabs+body+'</div>';
+}
+function openPreview(f){
+  if(window.matchMedia('(min-width:1024px)').matches){
+    document.getElementById('prev-col').innerHTML=previewHTML(f);
+  }else{
+    openSheet('<div class="sheet-body">'+previewHTML(f)+'</div>');
+  }
+}
+function openTrash(){
+  const items=[['old-notes.md','C:\\Users\\joel\\Desktop','2h ago'],['render-output','D:\\video\\ffmpeg-farm','1d ago'],['temp.json','C:\\code\\acme-api','3d ago']];
+  const bd=openModal('<div class="modal-header"><h2>Trash</h2><span class="subtle">3 items · on helios</span></div>'+
+  '<div class="modal-body" style="padding:8px"><div class="list">'+items.map(([n,p,t])=>
+   '<div class="list-item"><span style="color:var(--text-3)">'+I('file-text',16)+'</span><span class="col" style="gap:0;flex:1;min-width:0"><span class="truncate" style="font-size:13px">'+n+'</span><span class="mono subtle truncate" style="font-size:10.5px">'+p+' · trashed '+t+'</span></span>'+
+   '<button class="btn sm">Restore</button><button class="btn ghost sm icon" aria-label="Delete forever" style="color:var(--danger)">'+I('x',14)+'</button></div>').join('')+'</div></div>'+
+  '<div class="modal-footer"><button class="btn danger" style="margin-right:auto">Empty trash</button><button class="btn" data-a="no">Close</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+}
+renderFiles();
+/* open README preview on desktop for the screenshot-friendly default */
+if(window.matchMedia('(min-width:1024px)').matches)openPreview(FILES[8]);
+</script>

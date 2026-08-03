@@ -1,0 +1,109 @@
+<!--TITLE:System-->
+<style>
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+@media(min-width:900px){.stat-grid{grid-template-columns:repeat(4,1fr);}}
+.stat{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px 8px;display:flex;flex-direction:column;gap:2px;box-shadow:var(--sh-1);}
+.stat .lbl{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);}
+.stat .val{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;}
+.stat .hint{font-size:11px;color:var(--text-3);}
+.cores{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;}
+.core{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-3);}
+.core .pct{font-family:var(--mono);font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;}
+.bar{height:5px;background:var(--surface-3);border-radius:3px;overflow:hidden;}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:3px;}
+.bar.hot i{background:var(--danger);}
+.two-col{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px;}
+@media(min-width:900px){.two-col{grid-template-columns:1fr 1fr;}}
+.pow-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+@media(min-width:640px){.pow-grid{grid-template-columns:repeat(4,1fr);}}
+</style>
+<div class="stat-grid">
+  <div class="stat"><span class="lbl">CPU</span><span class="val" id="cpu-v">34%</span><span class="hint">Ryzen 9 5900X · 12c/24t</span><svg class="spark" id="sp-cpu" viewBox="0 0 100 30" preserveAspectRatio="none"></svg></div>
+  <div class="stat"><span class="lbl">Memory</span><span class="val">21.4<span style="font-size:13px;color:var(--text-3)"> / 64 GB</span></span><span class="hint">33% used</span><svg class="spark" id="sp-mem" viewBox="0 0 100 30" preserveAspectRatio="none"></svg></div>
+  <div class="stat"><span class="lbl">Disk</span><span class="val">2.1<span style="font-size:13px;color:var(--text-3)"> TB free</span></span><span class="hint">3 volumes · D: at 91%</span><div style="height:30px;display:flex;align-items:center"><span class="st degraded" id="disk-warn">D: at 91%</span></div></div>
+  <div class="stat"><span class="lbl">Uptime</span><span class="val">11d 4h</span><span class="hint">since Jul 23, 14:22</span><div style="height:30px"></div></div>
+</div>
+<div class="two-col">
+  <div class="card padded">
+    <div class="section-title">Cores</div>
+    <div class="cores" id="cores"></div>
+  </div>
+  <div class="card padded">
+    <div class="section-title">Disks</div>
+    <div class="col" style="gap:10px" id="disks"></div>
+  </div>
+  <div class="card padded">
+    <div class="section-title">Network — Ethernet</div>
+    <div class="row" style="gap:20px;margin-bottom:4px">
+      <span class="col" style="gap:0"><span class="subtle">↓ down</span><span class="mono tabular" style="font-size:16px;font-weight:600">18.2 MB/s</span><span class="subtle">1.4 TB total</span></span>
+      <span class="col" style="gap:0"><span class="subtle">↑ up</span><span class="mono tabular" style="font-size:16px;font-weight:600">1.1 MB/s</span><span class="subtle">212 GB total</span></span>
+    </div>
+    <svg class="spark" id="sp-rx" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+    <svg class="spark" id="sp-tx" viewBox="0 0 100 30" preserveAspectRatio="none" style="opacity:.6"></svg>
+  </div>
+  <div class="card padded">
+    <div class="section-title">GPU — RTX 4070 Ti</div>
+    <div class="row" style="gap:20px">
+      <span class="col" style="gap:0"><span class="subtle">Load</span><span class="mono tabular" style="font-size:16px;font-weight:600">12%</span></span>
+      <span class="col" style="gap:0"><span class="subtle">VRAM</span><span class="mono tabular" style="font-size:16px;font-weight:600">3.2 / 12 GB</span></span>
+      <span class="col" style="gap:0"><span class="subtle">Temp</span><span class="mono tabular" style="font-size:16px;font-weight:600">51°C</span></span>
+    </div>
+  </div>
+  <div class="card padded">
+    <div class="section-title">Top processes</div>
+    <div class="col" style="gap:6px" id="topproc"></div>
+    <a href="processes.html" style="font-size:12px;display:inline-flex;align-items:center;gap:4px;margin-top:8px">Open Processes<span aria-hidden="true">→</span></a>
+  </div>
+  <div class="card padded">
+    <div class="section-title">Power — helios</div>
+    <div class="pow-grid">
+      <button class="btn" id="pw-sleep"></button>
+      <button class="btn" id="pw-restart"></button>
+      <button class="btn danger" id="pw-shut"></button>
+      <button class="btn ghost" id="pw-cancel"></button>
+    </div>
+    <div class="cap-off" id="cap-demo" style="margin-top:10px"></div>
+    <p class="subtle" style="margin:10px 0 0">Power actions ask for your password again. Live metrics tick every 2.5s.</p>
+  </div>
+</div>
+<!--PAGEJS-->
+<script>
+function spark(el,pts,hot){const max=Math.max(...pts)*1.15;
+  const p=pts.map((v,i)=>(i/(pts.length-1)*100).toFixed(1)+','+(30-v/max*30).toFixed(1)).join(' ');
+  el.innerHTML='<polygon class="area" points="0,30 '+p+' 100,30"></polygon><polyline class="line" points="'+p+'"></polyline>';}
+const rnd=(n,lo,hi)=>Array.from({length:n},()=>lo+Math.random()*(hi-lo));
+spark(document.getElementById('sp-cpu'),rnd(40,15,70));
+spark(document.getElementById('sp-mem'),rnd(40,30,36));
+spark(document.getElementById('sp-rx'),rnd(40,2,20));
+spark(document.getElementById('sp-tx'),rnd(40,0.2,2));
+/* cores */
+const CORES=rnd(12,4,88);
+document.getElementById('cores').innerHTML=CORES.map((v,i)=>'<div class="core"><span class="row" style="justify-content:space-between">c'+i+'<span class="pct">'+v.toFixed(0)+'%</span></span><div class="bar'+(v>85?' hot':'')+'"><i style="width:'+v.toFixed(0)+'%"></i></div></div>').join('');
+/* disks */
+const DISKS=[['C: — system','931 GB',62],['D: — video','3.6 TB',91],['E: — backup','1.8 TB',44]];
+document.getElementById('disks').innerHTML=DISKS.map(([n,t,p])=>'<div class="col" style="gap:4px"><span class="row" style="justify-content:space-between;font-size:12.5px"><span>'+n+'</span><span class="mono tabular subtle">'+p+'% of '+t+'</span></span><div class="bar'+(p>=90?' hot':'')+'"><i style="width:'+p+'%"></i></div></div>').join('');
+/* top procs */
+document.getElementById('topproc').innerHTML=[['claude.exe','38.2%'],['node.exe','22.6%'],['chrome.exe','12.1%'],['Code.exe','6.8%']].map(([n,c])=>'<span class="row" style="justify-content:space-between;font-size:12.5px"><span class="mono" style="font-size:12px">'+n+'</span><span class="mono tabular muted">'+c+'</span></span>').join('');
+/* power */
+const pw=(id,icon,label)=>{const b=document.getElementById(id);b.innerHTML=I(icon,15)+label;return b;};
+pw('pw-sleep','moon','Sleep').onclick=()=>powConfirm('Sleep','helios suspends until woken at the machine. Sessions keep running when it wakes.');
+pw('pw-restart','refresh','Restart').onclick=()=>powConfirm('Restart','helios reboots. Supervisor and your sessions come back automatically.');
+pw('pw-shut','power','Shut down').onclick=()=>powConfirm('Shut down','helios powers off. You will not be able to reach it remotely until it is started at the machine.',true);
+const pc=pw('pw-cancel','x','Cancel pending');pc.disabled=true;pc.title='No power action is pending';
+function powConfirm(action,body,danger){
+  const M=MACHINES[CUR];
+  const bd=openModal('<div class="modal-header"><h2>'+action+' '+M.name+'?</h2></div>'+
+  '<div class="modal-body"><div class="row" style="gap:8px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--machine-ink) 40%,var(--border));border-radius:var(--r);background:color-mix(in oklab,var(--machine-ink) 8%,transparent)"><span class="swatch '+M.pat+'" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;display:inline-block"></span><span class="mono" style="font-size:12px;font-weight:600;color:var(--machine-ink)">'+M.name+'</span><span class="subtle">'+M.plat+'</span></div>'+
+  '<p style="margin:0;font-size:13px;color:var(--text-2)">'+body+'</p>'+
+  '<div class="field"><label>Confirm with your password</label><input class="input" type="password" autocomplete="current-password"></div></div>'+
+  '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary'+(danger?' danger':'')+'">'+action+'</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('.modal-footer .primary').onclick=()=>{closeModal(bd);toast('info',action+' requested — Cancel pending is now live');const c=document.getElementById('pw-cancel');c.disabled=false;c.title='';};
+}
+/* capability-disabled demo (this is what the same card shows on verdant) */
+document.getElementById('cap-demo').innerHTML=
+ '<button class="btn" aria-disabled="true" disabled>'+I('st-cap',15)+'Sleep</button>'+
+ '<span class="cap-reason">Sleep unavailable — this host has no suspend state. <span class="subtle">(shown here as it renders on verdant, the Linux VPS)</span></span>';
+/* live tick */
+setInterval(()=>{document.getElementById('cpu-v').textContent=(28+Math.random()*14).toFixed(0)+'%';},2500);
+</script>

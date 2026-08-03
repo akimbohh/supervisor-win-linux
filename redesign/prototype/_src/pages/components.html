@@ -1,0 +1,83 @@
+<!--TITLE:Components-->
+<style>
+.lib{display:flex;flex-direction:column;gap:22px;max-width:820px;}
+.lib .demo{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.swrow{display:flex;gap:10px;flex-wrap:wrap;}
+.sw{width:120px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;font-size:10.5px;}
+.sw .chip{height:44px;}
+.sw .cap{padding:5px 8px;color:var(--text-2);font-family:var(--mono);}
+</style>
+<div class="lib">
+  <div class="row" style="flex-wrap:wrap">
+    <span class="subtle">Preview the system under any theme + accent:</span>
+    <div class="seg" id="lib-theme"><button data-th="dark">Dark</button><button data-th="light">Light</button></div>
+    <div class="seg" id="lib-acc"><button data-ac="amber">Amber</button><button data-ac="teal">Teal</button><button data-ac="purple">Purple</button><button data-ac="blue">Blue</button><button data-ac="rose">Rose</button></div>
+  </div>
+  <div><div class="section-title">Status language — 7 states</div>
+    <div class="demo" id="st-demo"></div>
+    <p class="subtle" style="margin:8px 0 0">Glyph + color + word, never color alone. Same tokens on sessions, shells, machines, and the connection pill.</p></div>
+  <div><div class="section-title">Surfaces & elevation</div>
+    <div class="swrow" id="elev"></div></div>
+  <div><div class="section-title">Buttons</div>
+    <div class="demo">
+      <button class="btn primary">Primary</button><button class="btn">Default</button><button class="btn ghost">Ghost</button>
+      <button class="btn danger">Danger</button><button class="btn danger primary">Destructive</button>
+      <button class="btn" disabled>Disabled</button><button class="btn icon" aria-label="Icon" id="lib-ic"></button>
+      <div class="seg"><button class="active">All</button><button>Running</button><button>Exited</button></div>
+    </div></div>
+  <div><div class="section-title">Capability-disabled control</div>
+    <div class="cap-off" style="max-width:340px" id="lib-cap"></div></div>
+  <div><div class="section-title">Fields & controls</div>
+    <div class="demo" style="align-items:flex-start;flex-direction:column;max-width:380px">
+      <div class="field" style="width:100%"><label>Folder</label><input class="input mono" style="font-size:12px" value="C:\code\supervisor"><span class="help">Path on helios</span></div>
+      <div class="row" style="gap:16px"><label class="toggle"><input type="checkbox" checked><span class="knob"></span></label><span class="checkbox checked"></span><span class="kbd">Ctrl</span><span class="kbd">S</span></div>
+    </div></div>
+  <div><div class="section-title">Badges & machine swatches</div>
+    <div class="demo"><span class="badge">work</span><span class="badge accent">current</span>
+      <span class="conn"><span class="d"></span>23ms</span><span class="conn warn"><span class="d"></span>184ms</span><span class="conn bad"><span class="d"></span>512ms</span><span class="conn stale"><span class="d"></span>stale</span>
+      <span class="swatch pat-dots" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;display:inline-block"></span>
+      <span class="swatch pat-grid" style="width:24px;height:24px;border-radius:6px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;display:inline-block"></span>
+    </div></div>
+  <div><div class="section-title">Toast · modal · sheet · empty · skeleton</div>
+    <div class="demo">
+      <button class="btn" onclick="toast('success','Preset saved')">Success toast</button>
+      <button class="btn" onclick="toast('error','Could not reach verdant')">Error toast</button>
+      <button class="btn" onclick="demoModal()">Stacked modals</button>
+      <button class="btn" onclick="openSheet('<div class=sheet-body><div class=section-title>Bottom sheet</div><p style=font-size:13px;color:var(--text-2);margin:0>Grab handle, safe-area aware, single instance.</p></div>')">Sheet</button>
+    </div>
+    <div class="row" style="align-items:stretch;gap:10px;margin-top:10px;flex-wrap:wrap">
+      <div class="card" style="flex:1;min-width:240px"><div class="empty" style="min-height:150px;padding:24px" id="lib-empty"></div></div>
+      <div class="card padded" style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:8px">
+        <div class="skel" style="height:14px;width:60%"></div><div class="skel" style="height:14px;width:90%"></div><div class="skel" style="height:14px;width:75%"></div><div class="skel" style="height:44px"></div>
+      </div>
+    </div></div>
+  <div><div class="section-title">Log viewport with match highlight</div>
+    <div class="logview" style="height:120px" id="lib-log"></div></div>
+  <div><div class="section-title">Type</div>
+    <div class="col" style="gap:6px">
+      <span style="font-size:18px;font-weight:650">View title 18/650</span>
+      <span style="font-size:15px;font-weight:600">Heading 15/600</span>
+      <span style="font-size:14px">Body 14 — system UI stack, zero webfont bytes</span>
+      <span class="mono" style="font-size:13px">mono 13 — IBM Plex Mono → ui-monospace fallback</span>
+      <span style="font-size:22px;font-weight:600" class="tabular">22 634 MB/s metric</span>
+    </div></div>
+</div>
+<!--PAGEJS-->
+<script>
+document.getElementById('st-demo').innerHTML=['running','done','error','killing','degraded','disconnected','unreachable'].map(s=>stChip(s)).join('');
+document.getElementById('elev').innerHTML=[['0 page','var(--bg)'],['1 raised','var(--surface-1)'],['2 sticky','color-mix(in oklab,var(--bg) 85%,transparent)'],['3 overlay','var(--overlay)'],['4 floating','var(--surface-2)']].map(([n,c],i)=>'<div class="sw"><div class="chip" style="background:'+c+';box-shadow:'+(i>=3?'var(--sh-'+(i===3?3:4)+')':'none')+'"></div><div class="cap">'+n+'</div></div>').join('');
+document.getElementById('lib-ic').innerHTML=I('refresh',16);
+document.getElementById('lib-cap').innerHTML='<button class="btn" aria-disabled="true" disabled>'+I('st-cap',15)+'Sleep</button><span class="cap-reason">Sleep unavailable — this host has no suspend state.</span>';
+document.getElementById('lib-empty').innerHTML=I('rocket',30)+'<h3>No sessions yet</h3><p>Launch Claude Code in any folder and watch it from here.</p><button class="btn primary" style="margin-top:6px">New session</button>';
+document.getElementById('lib-log').innerHTML='⏺ Bash(npm test)\n  └ 41 passing, 2 <mark>pending</mark>\n⏺ The webhook retry test needs a fake timer\n  └ <mark class="cur">pending</mark> → patched\n';
+function demoModal(){
+  const b1=openModal('<div class="modal-header"><h2>First modal</h2></div><div class="modal-body"><p style="margin:0;font-size:13px;color:var(--text-2)">Modals stack. Esc closes only the topmost; focus is trapped and returned on close.</p></div><div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button><button class="btn primary" id="m2">Open another</button></div>');
+  b1.querySelector('#m2').onclick=()=>openModal('<div class="modal-header"><h2>Second modal</h2></div><div class="modal-body"><p style="margin:0;font-size:13px;color:var(--text-2)">This one is on top. Press Esc — it closes first.</p></div><div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>');
+}
+document.querySelectorAll('#lib-theme button').forEach(b=>b.onclick=()=>{localStorage.setItem('proto-theme',b.dataset.th);applyPrefs();sync2();});
+document.querySelectorAll('#lib-acc button').forEach(b=>b.onclick=()=>{localStorage.setItem('proto-accent',b.dataset.ac);applyPrefs();sync2();});
+function sync2(){const t=localStorage.getItem('proto-theme')||'dark',a=localStorage.getItem('proto-accent')||'amber';
+  document.querySelectorAll('#lib-theme button').forEach(b=>b.classList.toggle('active',b.dataset.th===t));
+  document.querySelectorAll('#lib-acc button').forEach(b=>b.classList.toggle('active',b.dataset.ac===a));}
+sync2();
+</script>

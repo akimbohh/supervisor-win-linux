@@ -1,0 +1,47 @@
+<!--TITLE:Processes-->
+<style>
+.proc-grid{display:grid;grid-template-columns:64px minmax(0,1fr) 72px 88px 44px;font-size:13px;}
+.proc-grid .ph{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.proc-grid .ph:hover{color:var(--text);}
+.proc-grid .pc{padding:9px 10px;border-bottom:1px solid var(--border-soft);display:flex;align-items:center;min-height:44px;min-width:0;}
+.proc-grid .num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;justify-content:flex-end;}
+</style>
+<div class="row" style="margin-bottom:12px;flex-wrap:wrap">
+  <div class="search-wrap"><input class="input" id="p-filter" type="search" placeholder="Filter by name or PID" aria-label="Filter processes"></div>
+  <button class="btn icon" id="p-refresh" aria-label="Refresh now"></button>
+  <span class="subtle" style="white-space:nowrap">auto-refresh 8s</span>
+</div>
+<div class="card"><div class="proc-grid" id="pgrid" role="table" aria-label="Processes"></div></div>
+<p class="subtle" style="margin:8px 2px" id="p-cap">Showing first 200 of 312 processes — filter to narrow.</p>
+<!--PAGEJS-->
+<script>
+const PROCS=[
+ [1204,'claude.exe',38.2,912],[8812,'node.exe',22.6,412],[411,'chrome.exe',12.1,1840],
+ [7120,'chrome.exe — renderer',8.4,620],[2201,'Code.exe',6.8,980],[901,'dwm.exe',4.2,180],
+ [15234,'ffmpeg.exe',3.9,340],[3302,'Supervisor (node)',2.1,164],[540,'explorer.exe',1.2,290],
+ [16,'System',0.4,8],[4788,'Tailscale.exe',0.3,52],[990,'audiodg.exe',0.1,24],
+];
+let sortK=2,sortD=-1;
+function renderProcs(){
+  const q=(document.getElementById('p-filter').value||'').toLowerCase();
+  const rows=PROCS.filter(p=>!q||p[1].toLowerCase().includes(q)||String(p[0]).includes(q))
+    .sort((a,b)=>(a[sortK]>b[sortK]?1:-1)*sortD);
+  const arrow=i=>i===sortK?(sortD<0?' ↓':' ↑'):'';
+  const heads=['PID','Name','CPU','Memory',''].map((h,i)=>'<div class="ph'+(i===0||i>=2?' num':'')+'" data-s="'+i+'" role="columnheader">'+h+arrow(i)+'</div>').join('');
+  document.getElementById('pgrid').innerHTML=heads+(rows.length?rows.map(p=>
+   '<div class="pc num muted">'+p[0]+'</div><div class="pc"><span class="truncate">'+p[1]+'</span></div>'+
+   '<div class="pc num'+(p[2]>20?'" style="color:var(--warn)':'')+'">'+p[2].toFixed(1)+'%</div>'+
+   '<div class="pc num muted">'+(p[3]>=1024?(p[3]/1024).toFixed(1)+' GB':p[3]+' MB')+'</div>'+
+   '<div class="pc"><button class="btn ghost sm icon" data-kill="'+p[0]+'" aria-label="Kill '+p[1]+'" style="color:var(--danger)">'+I('x',14)+'</button></div>').join('')
+   :'<div style="grid-column:1/-1"><div class="empty">'+I('search',30)+'<h3>No processes match</h3><p>Nothing named “'+q+'” is running on helios.</p></div></div>');
+  document.getElementById('p-cap').style.display=q?'none':'block';
+  document.querySelectorAll('.ph').forEach(h=>h.onclick=()=>{const k=+h.dataset.s;if(k===4)return;if(k===sortK)sortD*=-1;else{sortK=k;sortD=k>=2?-1:1;}renderProcs();});
+  document.querySelectorAll('[data-kill]').forEach(b=>b.onclick=()=>{
+    const p=PROCS.find(x=>x[0]==b.dataset.kill);
+    confirmModal({title:'Kill process?',body:'<span class="mono">'+p[1]+'</span> (PID '+p[0]+') will be terminated immediately. Unsaved state in it is lost.',okLabel:'Kill '+p[0],danger:true}).then(ok=>ok&&toast('success',p[1]+' killed'));});
+}
+document.getElementById('p-refresh').innerHTML=I('refresh',16);
+document.getElementById('p-refresh').onclick=()=>{toast('info','Refreshed');renderProcs();};
+document.getElementById('p-filter').addEventListener('input',renderProcs);
+renderProcs();
+</script>

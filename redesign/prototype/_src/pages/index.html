@@ -1,0 +1,29 @@
+<!--TITLE:Prototype-->
+<style>
+.hub{max-width:640px;display:flex;flex-direction:column;gap:14px;}
+.hub-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hub a.tile{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-1);color:var(--text);min-height:44px;}
+.hub a.tile:hover{text-decoration:none;border-color:var(--border-strong);background:var(--surface-2);}
+.hub a.tile .n{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;}
+.hub a.tile .d{font-size:12px;color:var(--text-3);}
+</style>
+<div class="hub">
+  <p style="margin:0;font-size:13px;color:var(--text-2);max-width:56ch">Working prototype of the Supervisor redesign (<b>Instrument</b> direction). Everything is mock data; interactions that matter are real — modals stack and trap focus, the machine switcher switches, Ctrl arms, logs stream, selection and clipboard bars work. Resize to 390px for the mobile layout. <span class="kbd">g</span>+<span class="kbd">s/f/c/p/y/t</span> jumps tabs, <span class="kbd">?</span> opens Request-a-change.</p>
+  <div class="hub-grid" id="hub"></div>
+  <div class="section-title">Docs</div>
+  <p style="margin:0;font-size:13px;color:var(--text-2)">Direction, system spec, implementation plan, and the §4 checklist live in <span class="mono" style="font-size:12px">docs/design/</span>.</p>
+  <div class="section-title">Try these</div>
+  <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-2);line-height:1.8">
+    <li>Tap the machine chip (top left) — switch to <span class="mono">verdant</span>, note the background texture, chip, and confirm dialogs all change</li>
+    <li>In the switcher: <span class="mono">atlas</span> shows the unreachable state, <span class="mono">mira</span> the not-signed-in state</li>
+    <li>Sessions → any card → live log with find, prev/next, follow-pause</li>
+    <li>Console → tap <b>Ctrl</b> — it arms and pulses until the next key</li>
+    <li>Files → long-press (or Ctrl+click) a file for multi-select; Copy → clipboard bar appears</li>
+    <li>System → Shut down — password re-prompt with machine identity repeated</li>
+  </ul>
+</div>
+<!--PAGEJS-->
+<script>
+const PAGES=[['sessions','rocket','Sessions','Cards, presets, detail modal with live log, new-session + folder picker'],['files','folder','Files','One-bar toolbar, 3-column desktop, selection + clipboard bars, trash'],['console','terminal','Console','Quick keys with armed Ctrl, degraded shell, key picker'],['processes','layers','Processes','Sortable grid, kill confirm, row cap'],['system','cpu','System','Live metrics, disks at 90%, power with password, capability-disabled Sleep'],['settings','settings','Settings','Live theme + accent switching, all eleven sections'],['components','grid','Component library','Every component, both themes, all five accents']];
+document.getElementById('hub').innerHTML=PAGES.map(([f,i,n,d])=>'<a class="tile" href="'+f+'.html"><span class="n">'+I(i,17)+n+'</span><span class="d">'+d+'</span></a>').join('');
+</script>

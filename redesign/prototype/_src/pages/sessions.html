@@ -1,0 +1,172 @@
+<!--TITLE:Sessions-->
+<style>
+.sess-toolbar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
+.preset-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:14px;scrollbar-width:none;}
+.preset-row::-webkit-scrollbar{display:none;}
+.preset{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--border);background:var(--surface-1);border-radius:var(--r-pill);padding:0 4px 0 12px;min-height:36px;white-space:nowrap;flex-shrink:0;}
+.preset .go{font-size:12px;font-weight:500;padding:8px 2px;cursor:pointer;}
+.preset .ovf{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--text-3);}
+.preset .ovf:hover{background:var(--surface-2);color:var(--text);}
+.preset.add{padding:0 12px;color:var(--text-2);gap:6px;cursor:pointer;}
+.preset.add:hover{border-color:var(--border-strong);color:var(--text);}
+.sess-grid{display:grid;gap:10px;}
+@media(min-width:900px){.sess-grid{grid-template-columns:1fr 1fr;}}
+.sess-card{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;display:flex;flex-direction:column;gap:8px;cursor:pointer;transition:border-color var(--t) var(--ease);box-shadow:var(--sh-1);}
+.sess-card:hover{border-color:var(--border-strong);}
+.sess-card .logprev{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--text-3);background:var(--bg);border:1px solid var(--border-soft);border-radius:var(--r-sm);padding:6px 8px;max-height:64px;overflow:hidden;white-space:pre-wrap;word-break:break-word;}
+.sess-card .acts{display:flex;gap:6px;align-items:center;}
+.grp-head{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin:16px 0 6px;display:flex;align-items:center;gap:8px;}
+.grp-head::after{content:'';flex:1;height:1px;background:var(--border-soft);}
+</style>
+<div class="sess-toolbar">
+  <div class="search-wrap"><input class="input" id="s-search" type="search" placeholder="Search folder, name, tag, log…" aria-label="Search sessions"></div>
+  <div class="seg" role="group" aria-label="Filter">
+    <button class="active">All</button><button>Running</button><button>Exited</button>
+  </div>
+  <button class="btn" id="s-group" aria-label="Group by">Group: folder</button>
+  <button class="btn primary" id="s-new">New session</button>
+</div>
+<div class="preset-row" id="presets" aria-label="Presets"></div>
+<div id="sess-list"></div>
+<div class="row" style="justify-content:center;margin-top:16px">
+  <button class="btn ghost" id="s-clear">Clear 2 exited sessions</button>
+</div>
+<!--PAGEJS-->
+<script>
+const SESSIONS=[
+ {id:1,st:'running',name:'supervisor · redesign',folder:'C:\\code\\supervisor',tag:'work',started:Date.now()-52*60000,log:'⏺ Read(web/styles.css)\n  └ 812 lines\n⏺ I\'ll neutralize the surface ladder and add the elevation tokens next.'},
+ {id:2,st:'running',name:null,folder:'C:\\code\\acme-api',tag:'work',started:Date.now()-8*60000,log:'⏺ Bash(npm test -- --filter billing)\n  └ 41 passing, 2 pending\n⏺ The webhook retry test needs a fake timer — patching now.'},
+ {id:3,st:'killing',name:'scratch',folder:'C:\\Users\\joel\\scratch',tag:null,started:Date.now()-3*3600000,log:'^C received, waiting for claude to flush…'},
+ {id:4,st:'error',name:null,folder:'C:\\code\\ffmpeg-farm',tag:'video',started:Date.now()-26*3600000,log:'Error: spawn ffprobe ENOENT\n    at ChildProcess._handle.onexit (node:internal/child_process:284:19)\nexit code 1'},
+ {id:5,st:'done',name:'docs pass',folder:'C:\\code\\supervisor',tag:'work',started:Date.now()-2*86400000,log:'⏺ Updated README.md\n✔ Session complete — 14 files changed.\nexit code 0'},
+];
+const fmtDur=ms=>{const s=Math.floor(ms/1000);if(s<60)return s+'s';const m=Math.floor(s/60);if(m<60)return m+'m '+(s%60)+'s';const h=Math.floor(m/60);if(h<24)return h+'h '+(m%60)+'m';return Math.floor(h/24)+'d '+(h%24)+'h';};
+const stWord={running:'running',done:'done',error:'error',killing:'killing'};
+function baseName(p){return p.split(/[\\/]/).pop();}
+function card(s){
+  const dur=s.st==='running'||s.st==='killing'?'<span class="mono tabular subtle" data-dur="'+s.started+'">'+fmtDur(Date.now()-s.started)+'</span>':'<span class="subtle">'+fmtDur(Date.now()-s.started)+' ago</span>';
+  const acts=s.st==='running'?'<button class="btn sm" data-a="log">Open log</button><button class="btn sm danger" data-a="kill">Kill</button>'
+    :s.st==='killing'?'<button class="btn sm" data-a="log">Open log</button><button class="btn sm" disabled>Kill</button>'
+    :'<button class="btn sm" data-a="log">Open log</button><button class="btn sm" data-a="restart">Restart</button>';
+  return '<article class="sess-card" data-id="'+s.id+'">'+
+    '<div class="row">'+stChip(s.st,stWord[s.st])+'<span style="font-weight:600;font-size:14px" class="truncate">'+(s.name||baseName(s.folder))+'</span><span class="spacer"></span>'+dur+'</div>'+
+    '<div class="row" style="gap:6px"><span class="mono subtle truncate" style="font-size:11px">'+s.folder+'</span>'+(s.tag?'<span class="badge">'+I('tag',11)+s.tag+'</span>':'')+'</div>'+
+    '<div class="logprev">'+s.log.split('\n').slice(-3).join('\n')+'</div>'+
+    '<div class="acts">'+acts+'<span class="spacer"></span><button class="btn ghost sm icon" data-a="menu" aria-label="More actions">'+I('kebab',16)+'</button></div></article>';
+}
+function renderList(){
+  const groups={};SESSIONS.forEach(s=>{(groups[s.folder]=groups[s.folder]||[]).push(s);});
+  document.getElementById('sess-list').innerHTML=Object.entries(groups).map(([f,ss])=>
+    '<div class="grp-head">'+f+'</div><div class="sess-grid">'+ss.map(card).join('')+'</div>').join('');
+}
+renderList();
+setInterval(()=>{document.querySelectorAll('[data-dur]').forEach(el=>{el.textContent=fmtDur(Date.now()-(+el.dataset.dur));});},1000);
+/* Presets */
+const PRESETS=[{n:'supervisor rc',f:'C:\\code\\supervisor'},{n:'acme api',f:'C:\\code\\acme-api'},{n:'blog draft',f:'C:\\code\\blog'},{n:'scratch',f:'C:\\Users\\joel\\scratch'}];
+document.getElementById('presets').innerHTML=PRESETS.map((p,i)=>
+  '<span class="preset"><button class="go" data-p="'+i+'">'+p.n+'</button><button class="ovf" data-pe="'+i+'" aria-label="Edit preset '+p.n+'">'+I('kebab',14)+'</button></span>').join('')+
+  '<button class="preset add" id="p-add">'+I('plus',14)+'Preset</button>';
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>toast('success','Launching claude rc in '+PRESETS[b.dataset.p].f));
+document.querySelectorAll('[data-pe]').forEach(b=>b.onclick=()=>openPresetEdit(PRESETS[b.dataset.pe]));
+document.getElementById('p-add').onclick=()=>openPresetEdit(null);
+function openPresetEdit(p){
+  const bd=openModal('<div class="modal-header"><h2>'+(p?'Edit preset':'New preset')+'</h2></div>'+
+   '<div class="modal-body"><div class="field"><label>Name</label><input class="input" value="'+(p?p.n:'')+'"></div>'+
+   '<div class="field"><label>Folder</label><div class="row"><input class="input mono" style="font-size:12px" value="'+(p?p.f.replace(/\\/g,'\\\\'):'')+'"><button class="btn">Browse</button></div></div>'+
+   '<div class="field"><label>Arguments</label><input class="input mono" style="font-size:12px" value="rc" aria-describedby="pe-h"><span class="help" id="pe-h">Appended to <span class="mono">claude</span></span></div>'+
+   '<div class="field"><label>Pre-prompt</label><textarea class="textarea" placeholder="Sent to the session once it starts"></textarea></div></div>'+
+   '<div class="modal-footer">'+(p?'<button class="btn danger" style="margin-right:auto">Delete preset</button>':'')+'<button class="btn" data-a="no">Cancel</button><button class="btn primary" data-a="ok">Save</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('[data-a=ok]').onclick=()=>{closeModal(bd);toast('success','Preset saved');};
+}
+/* Card actions */
+document.getElementById('sess-list').addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]');const cardEl=e.target.closest('.sess-card');if(!cardEl)return;
+  const s=SESSIONS.find(x=>x.id==cardEl.dataset.id);
+  if(!b){openDetail(s);return;}
+  e.stopPropagation();
+  if(b.dataset.a==='log')openDetail(s);
+  if(b.dataset.a==='kill')confirmModal({title:'Kill session?',body:'<span class="mono">'+(s.name||baseName(s.folder))+'</span> is running. Claude will be stopped mid-task; the log is kept.',okLabel:'Kill session',danger:true}).then(ok=>{if(ok){s.st='killing';renderList();toast('info','Killing session…');}});
+  if(b.dataset.a==='restart'){toast('success','Restarted in '+s.folder);}
+  if(b.dataset.a==='menu'){
+    const bd=openSheet('<div class="sheet-body"><div class="col" style="gap:2px">'+
+      '<button class="list-item tap" style="border-radius:var(--r)">'+I('edit',16)+'Rename &amp; tag</button>'+
+      '<button class="list-item tap" style="border-radius:var(--r)">'+I('send',16)+'Send log to new Claude session</button>'+
+      '<button class="list-item tap" style="border-radius:var(--r);color:var(--danger)">'+I('trash',16)+(s.st==='running'?'Kill and remove':'Remove from list')+'</button></div></div>');
+    bd._sheet.querySelectorAll('button').forEach(x=>x.onclick=()=>closeModal(bd));
+  }
+});
+document.getElementById('s-clear').onclick=()=>confirmModal({title:'Clear exited sessions?',body:'2 finished sessions and their logs will be removed from this list.',okLabel:'Clear',machine:false}).then(ok=>ok&&toast('success','Cleared 2 sessions'));
+document.getElementById('s-group').onclick=e=>{const o=['none','folder','tag'];const cur=e.currentTarget.textContent.split(': ')[1];e.currentTarget.textContent='Group: '+o[(o.indexOf(cur)+1)%3];};
+/* ── Session detail — the most important screen ── */
+const LOG_LINES=['⏺ Read(web/styles.css)','  └ 812 lines','⏺ The current ladder leans blue — replacing with equal-RGB grays.','⏺ Edit(web/styles.css)','  └ replaced 14 tokens','⏺ Bash(node build.js)','  └ vendor copy ok (skipped 26 unchanged)','⏺ Checking contrast: --text-2 on --surface-2 → 6.7:1 ✓','⏺ Edit(web/views/system.js)','  └ danger threshold at 90% wired to --danger','⏺ Bash(npx serve web -l 8080)','  └ serving on http://localhost:8080'];
+function openDetail(s){
+  const bd=openModal('<div class="modal-header">'+stChip(s.st,stWord[s.st])+'<div class="col" style="gap:0;min-width:0;flex:1"><h2 class="truncate">'+(s.name||baseName(s.folder))+'</h2><span class="mono subtle truncate" style="font-size:11px">'+s.folder+' · started '+new Date(s.started).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+'</span></div><button class="btn ghost icon" data-a="close" aria-label="Close">'+I('x',18)+'</button></div>'+
+  '<div class="modal-body" style="gap:8px">'+
+    '<div class="row" style="gap:6px"><div class="search-wrap">'+I('search',15)+'<input class="input" id="d-find" type="search" placeholder="Find in log" style="min-height:34px;font-size:13px"></div>'+
+    '<span class="subtle tabular" id="d-count" style="min-width:44px;text-align:center">—</span>'+
+    '<button class="btn sm icon" id="d-prev" aria-label="Previous match">'+I('chevron-up',15)+'</button>'+
+    '<button class="btn sm icon" id="d-next" aria-label="Next match">'+I('chevron-down',15)+'</button></div>'+
+    '<div class="logview" id="d-log" style="height:min(46vh,420px)" tabindex="0" aria-label="Session log">'+
+      '<div id="d-lines"></div><div class="log-resume hidden" id="d-resume"><button>'+I('arrow-down',13)+'Following paused — jump to live</button></div></div>'+
+    (s.st==='running'||s.st==='killing'?'<div class="row" style="gap:6px"><input class="input mono" id="d-stdin" placeholder="Send to session stdin…" style="font-size:12px"><button class="btn icon" aria-label="Send" id="d-send">'+I('send',16)+'</button></div>':'')+
+  '</div>'+
+  '<div class="modal-footer"><button class="btn sm" id="d-copy">'+I('copy',14)+'Copy log</button><button class="btn sm" id="d-claude">'+I('send',14)+'Send to Claude</button><span class="spacer"></span>'+
+    (s.st==='running'?'<button class="btn danger" id="d-kill">Kill</button>':s.st==='killing'?'<button class="btn" disabled>Killing…</button>':'<button class="btn primary" id="d-restart">Restart</button>')+'</div>',{size:'lg'});
+  bd.querySelector('[data-a=close]').onclick=()=>closeModal(bd);
+  const lines=bd.querySelector('#d-lines'),log=bd.querySelector('#d-log'),resume=bd.querySelector('#d-resume');
+  let pinned=true,li=0;
+  lines.textContent=s.log+'\n';
+  const feed=setInterval(()=>{if(s.st!=='running')return;lines.textContent+=LOG_LINES[li++%LOG_LINES.length]+'\n';if(pinned)log.scrollTop=log.scrollHeight;},900);
+  log.addEventListener('scroll',()=>{const nearBottom=log.scrollHeight-log.scrollTop-log.clientHeight<30;
+    if(!nearBottom&&pinned){pinned=false;resume.classList.remove('hidden');}
+    if(nearBottom&&!pinned){pinned=true;resume.classList.add('hidden');}});
+  resume.querySelector('button').onclick=()=>{log.scrollTop=log.scrollHeight;};
+  const obs=new MutationObserver(()=>{});
+  bd.addEventListener('DOMNodeRemoved',()=>clearInterval(feed));
+  /* find */
+  const find=bd.querySelector('#d-find'),count=bd.querySelector('#d-count');let matches=[],cur=-1;
+  function doFind(){const q=find.value.trim();lines.innerHTML='';matches=[];cur=-1;
+    if(!q){lines.textContent=s.log+'\n';count.textContent='—';return;}
+    const esc=t=>t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+    lines.innerHTML=esc(s.log).replace(re,m=>'<mark>'+m+'</mark>');
+    matches=[...lines.querySelectorAll('mark')];count.textContent=matches.length?'1/'+matches.length:'0';
+    if(matches.length)step(0);}
+  function step(d){if(!matches.length)return;if(cur>=0)matches[cur].classList.remove('cur');
+    cur=((cur+d)%matches.length+matches.length)%matches.length;if(cur<0)cur=0;
+    matches[cur].classList.add('cur');count.textContent=(cur+1)+'/'+matches.length;
+    const m=matches[cur];log.scrollTop=m.offsetTop-log.clientHeight/2;}
+  find.addEventListener('input',doFind);
+  bd.querySelector('#d-prev').onclick=()=>step(-1);bd.querySelector('#d-next').onclick=()=>step(1);
+  bd.querySelector('#d-copy').onclick=()=>toast('success','Log copied');
+  bd.querySelector('#d-claude').onclick=()=>{closeModal(bd);openNewSession('Selection from '+(s.name||baseName(s.folder))+' log (last 2000 chars) pre-filled as pre-prompt');};
+  const k=bd.querySelector('#d-kill');if(k)k.onclick=()=>confirmModal({title:'Kill session?',body:'Claude will be stopped mid-task; the log is kept.',okLabel:'Kill session',danger:true}).then(ok=>{if(ok){closeModal(bd);s.st='killing';renderList();}});
+  const sd=bd.querySelector('#d-send');if(sd)sd.onclick=()=>{const i=bd.querySelector('#d-stdin');if(i.value){lines.textContent+='> '+i.value+'\n';i.value='';if(pinned)log.scrollTop=log.scrollHeight;}};
+}
+/* ── New session ── */
+document.getElementById('s-new').onclick=()=>openNewSession();
+function openNewSession(preFill){
+  const bd=openModal('<div class="modal-header"><h2>New session</h2></div>'+
+  '<div class="modal-body">'+
+   '<div class="field"><label>Folder</label><div class="row"><input class="input mono" id="ns-folder" style="font-size:12px" value="C:\\code\\supervisor"><button class="btn" id="ns-browse">Browse</button></div></div>'+
+   '<div class="field"><label>Command</label><div class="seg" role="group"><button class="active">claude rc</button><button>claude</button><button>custom args</button></div></div>'+
+   '<div class="field"><label>Pre-prompt <span class="subtle" style="font-weight:400">— sent once the session starts</span></label><textarea class="textarea">'+(preFill||'')+'</textarea></div>'+
+   '<div class="field"><label>Environment <span class="subtle" style="font-weight:400">— KEY=value per line, # comments</span></label><textarea class="textarea" placeholder="ANTHROPIC_LOG=debug"></textarea></div>'+
+   '<div class="field"><label>Save as preset <span class="subtle" style="font-weight:400">— optional</span></label><input class="input" placeholder="Preset name"></div>'+
+  '</div>'+
+  '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary">'+I('rocket',15)+'Launch</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('.btn.primary').onclick=()=>{closeModal(bd);toast('success','Session launched in C:\\code\\supervisor');};
+  bd.querySelector('#ns-browse').onclick=()=>{
+    const rows=[['..','up'],['acme-api',''],['blog',''],['ffmpeg-farm',''],['supervisor','current'],['toys','']];
+    const b2=openModal('<div class="modal-header"><h2>Choose folder</h2></div>'+
+     '<div class="modal-body" style="gap:8px"><input class="input mono" style="font-size:12px" value="C:\\code">'+
+     '<div class="row" style="flex-wrap:wrap;gap:6px"><span class="badge">'+I('home',12)+'Home</span><span class="badge">'+I('folder',12)+'Desktop</span><span class="badge">'+I('download',12)+'Downloads</span><span class="badge">'+I('hard-drive',12)+'C:\\</span><span class="badge">'+I('hard-drive',12)+'D:\\</span></div>'+
+     '<div class="card"><div class="list" style="max-height:260px;overflow:auto">'+rows.map(([n,k])=>'<button class="list-item tap" style="width:100%;text-align:left">'+I(k==='up'?'arrow-up':'folder',16)+'<span'+(k==='up'?' class="muted"':'')+'>'+n+'</span>'+(k==='current'?'<span class="badge accent" style="margin-left:auto">current</span>':'')+'</button>').join('')+'</div></div></div>'+
+     '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary">Choose this folder</button></div>');
+    b2.querySelector('[data-a=no]').onclick=()=>closeModal(b2);
+    b2.querySelector('.btn.primary').onclick=()=>{closeModal(b2);bd.querySelector('#ns-folder').value='C:\\code\\supervisor';};
+  };
+}
+</script>

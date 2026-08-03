@@ -1,0 +1,222 @@
+<body>
+<div class="app">
+  <header class="app-header">
+    <button class="machine-chip" id="machine-chip" aria-label="Switch machine" aria-haspopup="dialog">
+      <span class="swatch" id="m-swatch"></span>
+      <span style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
+        <span class="mname" id="m-name">helios</span>
+        <span class="mplat" id="m-plat">Windows</span>
+      </span>
+      <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <h1 class="app-title" style="min-width:0"><span class="truncate">{{TITLE}}</span></h1>
+    <div class="header-actions">
+      <span class="conn" id="conn" role="status" aria-label="Connection: ok, 23 milliseconds"><span class="d"></span><span id="conn-ms">23ms</span></span>
+      <button class="btn ghost icon" id="help-btn" aria-label="Request a change"></button>
+    </div>
+  </header>
+  <main class="app-main" id="main">
+{{CONTENT}}
+  </main>
+  <nav class="tabbar" aria-label="Primary">
+    <a href="sessions.html" data-tab="sessions" data-icon="rocket">Sessions</a>
+    <a href="files.html" data-tab="files" data-icon="folder">Files</a>
+    <a href="console.html" data-tab="console" data-icon="terminal">Console</a>
+    <a href="processes.html" data-tab="processes" data-icon="layers">Processes</a>
+    <a href="system.html" data-tab="system" data-icon="cpu">System</a>
+    <a href="settings.html" data-tab="settings" data-icon="settings">Settings</a>
+  </nav>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div id="overlay-root"></div>
+<script>
+/* ── Icons (Lucide-derived, 1.5px stroke) ── */
+const IPATHS={
+rocket:'<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+terminal:'<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+layers:'<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.91a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+cpu:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>',
+settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+help:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+check:'<polyline points="20 6 9 17 4 12"/>',
+more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+kebab:'<circle cx="12" cy="6" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="18" r="1"/>',
+'chevron-right':'<polyline points="9 18 15 12 9 6"/>','chevron-left':'<polyline points="15 18 9 12 15 6"/>',
+'chevron-up':'<polyline points="18 15 12 9 6 15"/>','chevron-down':'<polyline points="6 9 12 15 18 9"/>',
+'arrow-up':'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+'arrow-down':'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
+play:'<polygon points="5 3 19 12 5 21 5 3"/>',
+square:'<rect x="7" y="7" width="10" height="10" rx="1"/>',
+copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+trash:'<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+edit:'<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+'file-text':'<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
+image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><polyline points="21 15 16 10 5 21"/>',
+archive:'<rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9"/><line x1="10" y1="13" x2="14" y2="13"/>',
+home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+'hard-drive':'<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/>',
+pin:'<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>',
+power:'<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
+moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+tag:'<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+warning:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+list:'<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+sort:'<path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/>',
+scissors:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',
+monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+server:'<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+/* status glyphs */
+'st-killing':'<path d="M12 3a9 9 0 1 0 9 9" stroke-dasharray="4 3"/>',
+'st-cap':'<circle cx="12" cy="12" r="9"/><line x1="5.6" y1="18.4" x2="18.4" y2="5.6"/>',
+'st-unreach':'<path d="M2 12c2-3 4-3 6 0s4 3 6 0"/><path d="M17 12h.01" /><path d="M21 12h.01"/>',
+'wave-broken':'<path d="M2 13c1.5-2.5 3-2.5 4.5 0s3 2.5 4.5 0"/><line x1="14.5" y1="10" x2="16" y2="14"/><path d="M18 13c1-1.8 2.2-2.2 4-1"/>',
+};
+function I(n,s=18,sw=1.5){return '<svg xmlns="http://www.w3.org/2000/svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(IPATHS[n]||'')+'</svg>';}
+/* Status chip builder */
+function stChip(state,word){
+  const g={running:'<span class="livebars" aria-hidden="true"><i></i><i></i><i></i></span>',
+    done:I('square',15),error:I('x',15),killing:'<span class="spin" style="display:inline-flex">'+I('st-killing',15)+'</span>',
+    degraded:I('warning',15),disconnected:I('st-cap',15),unreachable:I('wave-broken',15)};
+  return '<span class="st '+state+'">'+(g[state]||'')+(word||state)+'</span>';
+}
+/* Toast */
+function toast(kind,msg){const t=document.createElement('div');t.className='toast '+kind;
+  t.innerHTML=I(kind==='success'?'check':kind==='error'?'x':kind==='warn'?'warning':'info',16)+'<span>'+msg+'</span><button class="btn ghost sm icon" aria-label="Dismiss" style="margin-left:auto">'+I('x',14)+'</button>';
+  t.querySelector('button').onclick=()=>t.remove();document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),4200);}
+/* Modal stack — Esc closes topmost, focus trap + return */
+const _mstack=[];
+function openModal(html,{size='',dismissible=true}={}){
+  const prev=document.activeElement;
+  const bd=document.createElement('div');bd.className='modal-backdrop';bd.style.zIndex=60+_mstack.length*2;
+  bd.innerHTML='<div class="modal '+size+'" role="dialog" aria-modal="true">'+html+'</div>';
+  const m=bd.firstElementChild;
+  if(dismissible)bd.addEventListener('click',e=>{if(e.target===bd)closeModal(bd);});
+  bd._prev=prev;_mstack.push(bd);document.getElementById('overlay-root').appendChild(bd);
+  const f=m.querySelector('input,button,textarea,select');if(f)f.focus();
+  m.addEventListener('keydown',e=>{ if(e.key!=='Tab')return;
+    const els=[...m.querySelectorAll('button,input,textarea,select,a[href]')].filter(x=>!x.disabled&&x.offsetParent);
+    if(!els.length)return;const first=els[0],last=els[els.length-1];
+    if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault();}
+    else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault();}});
+  return bd;}
+function closeModal(bd){bd=bd||_mstack[_mstack.length-1];if(!bd)return;_mstack.splice(_mstack.indexOf(bd),1);
+  const p=bd._prev;bd.remove();if(p&&p.focus)p.focus();}
+function openSheet(html){const prev=document.activeElement;
+  const bd=document.createElement('div');bd.className='sheet-backdrop';bd.style.zIndex=60+_mstack.length*2;
+  bd.addEventListener('click',()=>closeModal(bd));
+  const sh=document.createElement('div');sh.className='sheet';sh.setAttribute('role','dialog');sh.setAttribute('aria-modal','true');sh.style.zIndex=61+_mstack.length*2;
+  sh.innerHTML='<div class="grab" aria-hidden="true"></div>'+html;
+  bd._prev=prev;bd._sheet=sh;_mstack.push(bd);
+  const root=document.getElementById('overlay-root');root.appendChild(bd);root.appendChild(sh);
+  const origRemove=bd.remove.bind(bd);bd.remove=()=>{origRemove();sh.remove();};
+  return bd;}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&_mstack.length){closeModal();e.preventDefault();}});
+function confirmModal({title,body,okLabel='Confirm',danger=false,machine=true}){
+  return new Promise(res=>{
+    const M=MACHINES[CUR];
+    const bd=openModal('<div class="modal-header"><h2>'+title+'</h2></div>'+
+      '<div class="modal-body">'+(machine?'<div class="row" style="gap:8px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--machine-ink) 40%,var(--border));border-radius:var(--r);background:color-mix(in oklab,var(--machine-ink) 8%,transparent)"><span class="swatch '+M.pat+'" style="width:18px;height:18px;border-radius:4px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;display:inline-block"></span><span class="mono" style="font-size:12px;font-weight:600;color:var(--machine-ink)">'+M.name+'</span><span class="subtle">'+M.plat+'</span></div>':'')+
+      '<p style="margin:0;font-size:13px;color:var(--text-2)">'+body+'</p></div>'+
+      '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary'+(danger?' danger':'')+'" data-a="ok">'+okLabel+'</button></div>');
+    bd.querySelector('[data-a=no]').onclick=()=>{closeModal(bd);res(false);};
+    bd.querySelector('[data-a=ok]').onclick=()=>{closeModal(bd);res(true);};});}
+/* ── Machine identity ── */
+const MACHINES={
+  desktop:{key:'desktop',name:'helios',plat:'Windows 11 · desktop',short:'Windows',pat:'pat-dots',state:'online',ms:23,icon:'monitor'},
+  vps:{key:'vps',name:'verdant',plat:'Ubuntu 24.04 · VPS',short:'Linux',pat:'pat-grid',state:'online',ms:81,icon:'server'},
+  atlas:{key:'atlas',name:'atlas',plat:'Debian 12 · homelab',short:'Linux',pat:'pat-grid',state:'unreachable',last:'2h ago',icon:'server'},
+  mira:{key:'mira',name:'mira',plat:'Windows 11 · laptop',short:'Windows',pat:'pat-dots',state:'signedout',icon:'monitor'},
+};
+let CUR=localStorage.getItem('proto-machine')||'desktop';
+if(!MACHINES[CUR]||MACHINES[CUR].state!=='online')CUR='desktop';
+function applyPrefs(){
+  document.documentElement.dataset.theme=localStorage.getItem('proto-theme')||'dark';
+  document.documentElement.dataset.accent=localStorage.getItem('proto-accent')||'amber';
+  document.documentElement.dataset.machine=CUR;
+  const M=MACHINES[CUR];
+  document.getElementById('m-name').textContent=M.name;
+  document.getElementById('m-plat').textContent=M.short;
+  const sw=document.getElementById('m-swatch');sw.className='swatch '+M.pat;
+  document.getElementById('conn-ms').textContent=M.ms+'ms';
+}
+function machineRow(M){
+  const st=M.state==='online'?stChip('running','online · '+M.ms+'ms'):M.state==='unreachable'?stChip('unreachable','unreachable · seen '+M.last):'<span class="st disconnected">'+I('lock',14)+'not signed in</span>';
+  return '<button class="list-item tap" data-m="'+M.key+'" style="width:100%;text-align:left;border-radius:var(--r)'+(M.key===CUR?';background:color-mix(in oklab,var(--machine-ink) 8%,transparent)':'')+'">'+
+    '<span class="swatch '+M.pat+'" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;flex-shrink:0"></span>'+
+    '<span class="col" style="gap:1px;flex:1;min-width:0"><span class="row" style="gap:6px"><span class="mono" style="font-size:13px;font-weight:600">'+M.name+'</span>'+(M.key===CUR?'<span class="badge accent">current</span>':'')+'</span><span class="subtle">'+M.plat+'</span></span>'+st+'</button>';
+}
+function openSwitcher(){
+  const html='<div class="sheet-body"><div class="section-title">Machines</div><div class="col" style="gap:4px">'+
+    Object.values(MACHINES).map(machineRow).join('')+'</div>'+
+    '<p class="subtle" style="margin:10px 2px 0">Each machine keeps its own pattern and color everywhere — header, background, confirmations, notifications.</p></div>';
+  const bd=openSheet(html);
+  bd._sheet.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{
+    const M=MACHINES[b.dataset.m];
+    if(M.state==='online'){CUR=M.key;localStorage.setItem('proto-machine',CUR);closeModal(bd);applyPrefs();toast('info','Switched to '+M.name);}
+    else if(M.state==='signedout'){closeModal(bd);openSignIn(M);}
+    else{closeModal(bd);openUnreachable(M);}
+  });
+}
+function openSignIn(M){
+  const bd=openModal('<div class="modal-header"><span class="swatch '+M.pat+'" style="width:20px;height:20px;border-radius:5px;border:1px solid var(--machine-ink);position:relative;overflow:hidden"></span><h2 style="font-family:var(--mono)">'+M.name+'</h2><span class="subtle">'+M.plat+'</span></div>'+
+    '<div class="modal-body"><p style="margin:0;font-size:13px;color:var(--text-2)">You\'re not signed in to this machine yet. Its password is separate from other machines.</p>'+
+    '<div class="field"><label for="si-pw">Password for '+M.name+'</label><div class="row"><input id="si-pw" class="input" type="password" autocomplete="current-password"><button class="btn icon" aria-label="Show password">'+I('eye',16)+'</button></div></div>'+
+    '<label class="row" style="gap:8px;font-size:13px;color:var(--text-2);cursor:pointer"><span class="checkbox"></span>Trust this device for 60 days</label></div>'+
+    '<div class="modal-footer"><button class="btn" data-a="no">Cancel</button><button class="btn primary">Sign in</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('.checkbox').onclick=e=>e.currentTarget.classList.toggle('checked');
+  bd.querySelector('.btn.primary').onclick=()=>{closeModal(bd);toast('error','Sign-in is mocked in this prototype');};
+}
+function openUnreachable(M){
+  const bd=openModal('<div class="modal-body" style="align-items:center;text-align:center;padding:36px 24px;gap:12px">'+
+    '<span class="swatch '+M.pat+'" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--machine-ink);position:relative;overflow:hidden;opacity:.65"></span>'+
+    '<div>'+stChip('unreachable','unreachable')+'</div>'+
+    '<h3 style="margin:0;font-size:16px"><span class="mono">'+M.name+'</span> isn\'t responding</h3>'+
+    '<p style="margin:0;font-size:13px;color:var(--text-2);max-width:300px">Last seen '+M.last+' over Tailscale. The machine may be off, asleep, or off the tailnet. Nothing you do here can affect it until it\'s back.</p>'+
+    '<div class="row" style="margin-top:6px"><button class="btn" data-a="no">Close</button><button class="btn primary">'+I('refresh',15)+'Retry now</button></div></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('.btn.primary').onclick=()=>{toast('warn','Still unreachable — retrying in background');closeModal(bd);};
+}
+/* Tabbar icons + active */
+document.querySelectorAll('.tabbar a').forEach(a=>{
+  a.insertAdjacentHTML('afterbegin',I(a.dataset.icon,20));
+  const lbl=document.createElement('span');lbl.textContent=a.textContent.replace(/^\s+/,'').trim()||a.dataset.tab;
+  a.innerHTML=I(a.dataset.icon,20);a.appendChild(lbl);
+  if(a.dataset.tab==='{{ACTIVE}}'){a.classList.add('active');a.setAttribute('aria-current','page');}
+});
+document.getElementById('machine-chip').onclick=openSwitcher;
+document.getElementById('help-btn').innerHTML=I('help',18);
+document.getElementById('help-btn').onclick=()=>{
+  const bd=openModal('<div class="modal-header"><h2>Request a change</h2></div><div class="modal-body">'+
+  '<p style="margin:0;font-size:13px;color:var(--text-2)">Describe what you want changed about Supervisor. This opens an interactive Claude session in the app\'s own repo on <span class="mono" style="color:var(--machine-ink)">'+MACHINES[CUR].name+'</span> with your request pre-filled, and takes you to its console tab.</p>'+
+  '<div class="field"><label for="mx-req">Request</label><textarea id="mx-req" class="textarea" placeholder="e.g. Add a sixth accent color"></textarea></div></div>'+
+  '<div class="modal-footer"><span class="subtle" style="margin-right:auto"><span class="kbd">?</span> opens this anywhere</span><button class="btn" data-a="no">Cancel</button><button class="btn primary">'+I('send',15)+'Start session</button></div>');
+  bd.querySelector('[data-a=no]').onclick=()=>closeModal(bd);
+  bd.querySelector('.btn.primary').onclick=()=>{closeModal(bd);toast('success','Handed off to Claude — opening Console');};
+};
+/* g-chord nav + ? */
+let _g=0;
+document.addEventListener('keydown',e=>{
+  if(e.target.matches('input,textarea,select'))return;
+  if(e.key==='?'){document.getElementById('help-btn').click();return;}
+  if(e.key==='g'){_g=Date.now();return;}
+  if(Date.now()-_g<800){const map={s:'sessions',f:'files',c:'console',p:'processes',y:'system',t:'settings'};
+    if(map[e.key])location.href=map[e.key]+'.html';}
+  _g=0;});
+applyPrefs();
+</script>
+{{PAGEJS}}
+</body>
