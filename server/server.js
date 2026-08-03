@@ -50,7 +50,43 @@ try { fs.writeFileSync(pidPath, String(process.pid)); } catch (e) {}
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', true);
+
+// --- Security headers (CRIT-2) ---
+// A strict CSP is the backstop that keeps a content-injection bug (e.g. a
+// regression in the Markdown renderer) from escalating to code execution in
+// the authenticated origin. script-src 'self' blocks inline scripts AND inline
+// event handlers (onerror=, onclick=), which is the actual XSS defense; that is
+// why login.html's script was externalized and index.html's inline onerror
+// handlers were removed. style-src keeps 'unsafe-inline' because the vanilla UI
+// sets element styles pervasively and inline styles cannot execute code.
+// connect-src 'self' covers same-origin fetch + ws/wss. Multi-machine peers are
+// reached by navigating to their own origin, so this stays 'self'.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self'",
+  "media-src 'self'",
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
+// Trust proxy only when explicitly enabled (HIGH-1). Blanket trust lets a
+// client spoof X-Forwarded-For and rotate the login-rate-limit bucket per
+// request. Default: trust nothing; req.ip is the raw socket address.
+app.set('trust proxy', process.env.SUPERVISOR_TRUST_PROXY === '1' ? true : false);
 
 // --- Static assets ---
 // Override which UI directory to serve via SUPERVISOR_WEB_DIR (e.g. "web.new"
