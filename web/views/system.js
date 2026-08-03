@@ -144,19 +144,31 @@ window.SystemView = async function (root, { app }) {
     tp.appendChild(tbl);
     detail.appendChild(tp);
 
-    // Power
+    // Power — capability-aware: unsupported actions render disabled with a
+    // reason (§3.2) rather than being hidden or silently failing.
+    const caps = (snap && snap.caps) || {};
+    const power = caps.power || {};
     const pwr = el('div', { class: 'card padded' });
     pwr.appendChild(el('div', { class: 'section-title', style: { margin: 0 } }, 'Power'));
+    const sleepReason = power.sleep === false
+      ? (caps.virt && caps.virt !== 'none' ? 'Sleep unavailable — virtualized host has no suspend state' : 'Sleep is not supported on this host')
+      : null;
     pwr.appendChild(el('div', { class: 'row gap-2 mt-2', style: { flexWrap: 'wrap' } }, [
-      makeBtn('moon', 'Sleep', 'sleep', false),
+      makeBtn('moon', 'Sleep', 'sleep', false, false, sleepReason),
       makeBtn('rotate-ccw', 'Restart', 'restart', true),
       makeBtn('power', 'Shutdown', 'shutdown', true),
       makeBtn('x', 'Cancel pending', 'cancel', false, true),
     ]));
+    if (sleepReason) pwr.appendChild(el('div', { class: 'cap-reason mt-2' }, sleepReason));
     detail.appendChild(pwr);
   }
 
-  function makeBtn(ic, label, action, danger, requirePwOnly = false) {
+  function makeBtn(ic, label, action, danger, requirePwOnly = false, disabledReason = null) {
+    if (disabledReason) {
+      const b = el('button', { class: 'btn cap-off', 'aria-disabled': 'true', title: disabledReason, disabled: true });
+      b.innerHTML = window.icon('slash', { size: 14 }) + ' ' + label;
+      return b;
+    }
     const b = el('button', { class: 'btn ' + (danger ? 'danger' : '') });
     b.innerHTML = window.icon(ic, { size: 14 }) + ' ' + label;
     b.addEventListener('click', () => doPower(action, label, danger, requirePwOnly));
