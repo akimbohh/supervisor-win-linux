@@ -24,6 +24,35 @@ function setup(server, { onMessage } = {}) {
     });
   });
 
+  // Topics every authenticated client receives without an explicit subscribe:
+  // connection control + app-wide settings (theme/accent) sync.
+  const GLOBAL_TOPICS = new Set(['hello', 'pong', 'server', 'settings']);
+  // High-frequency topics we drop for a client whose send buffer is backed up,
+  // rather than growing an unbounded queue on a slow link.
+  const LOSSY_PREFIXES = ['system', 'shell:', 'session:'];
+  const MAX_BUFFERED = 1 << 20; // 1 MB
+
+  function isLossy(topic) {
+    return LOSSY_PREFIXES.some(p => topic === p || topic.startsWith(p));
+  }
+
+  // HIGH-3: deliver each event only to clients subscribed to its topic (plus
+  // the global set). Previously every event went to every socket, leaking every
+  // shell's bytes and every watched path to every open tab and wasting bandwidth.
+  function deliver(msg) {
+    const topic = msg && msg.topic;
+    if (topic == null) return;
+    const data = JSON.stringify(msg);
+    const global = GLOBAL_TOPICS.has(topic);
+    for (const c of wss.clients) {
+      if (c.readyState !== 1) continue;
+      if (!global && !(c.subs && c.subs.has(topic))) continue;
+      if (isLossy(topic) && c.bufferedAmount > MAX_BUFFERED) continue; // backpressure
+      c.send(data);
+    }
+  }
+
+  // Send to every connected client regardless of subscription (rare; control use).
   function broadcast(msg) {
     const data = JSON.stringify(msg);
     for (const c of wss.clients) {
@@ -31,8 +60,21 @@ function setup(server, { onMessage } = {}) {
     }
   }
 
-  // Pipe hub events to all clients.
-  hub.on('msg', broadcast);
+  // Pipe hub events to subscribed clients.
+  hub.on('msg', deliver);
+
+  // Heartbeat: ws-level ping every 30s; terminate a socket that missed the
+  // previous round. Reaping a half-open socket (phone slept, Tailscale dropped)
+  // triggers its 'close' handler, which frees its file watchers.
+  const heartbeat = setInterval(() => {
+    for (const c of wss.clients) {
+      if (c.isAlive === false) { try { c.terminate(); } catch (e) {} continue; }
+      c.isAlive = false;
+      try { c.ping(); } catch (e) {}
+    }
+  }, 30000);
+  heartbeat.unref && heartbeat.unref();
+  wss.on('close', () => clearInterval(heartbeat));
 
   // Lazy-required to avoid a circular dependency at boot.
   let watchers = null;
@@ -42,6 +84,8 @@ function setup(server, { onMessage } = {}) {
 
   wss.on('connection', (ws, req) => {
     ws.subs = new Set();
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
     ws.send(JSON.stringify({ topic: 'hello', payload: { t: Date.now() } }));
 
     function handleSub(topic) {
