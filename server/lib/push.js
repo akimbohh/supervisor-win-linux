@@ -1,9 +1,17 @@
 // Web Push manager: VAPID keys (auto-generated), subscriptions, broadcast.
+const os = require('os');
 const crypto = require('crypto');
 const webpush = require('web-push');
 const { readJSON, writeJSON } = require('./store');
 const settings = require('./settings');
 const hub = require('./hub');
+
+// Machine label prefix so a notification on the phone says WHICH host it came
+// from (§4). Uses settings.machineLabel if set, else the hostname.
+function machineLabel() {
+  const l = settings.get().machineLabel;
+  return (typeof l === 'string' && l.trim()) ? l.trim() : os.hostname();
+}
 
 const VAPID_FILE = 'vapid.json';
 const SUBS_FILE = 'push-subs.json';
@@ -95,7 +103,10 @@ hub.on('notify', async (e) => {
     url = e.url || '/';
     tag = e.tag;
   }
-  await broadcast({ title, body, tag, url, sticky });
+  // Attribute every notification to its machine so it's unambiguous on the
+  // lock screen when multiple instances push to the same phone (§4).
+  title = '[' + machineLabel() + '] ' + title;
+  await broadcast({ title, body, tag, url, sticky, machine: machineLabel() });
 });
 
 module.exports = {

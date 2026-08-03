@@ -137,6 +137,14 @@ app.use(express.static(WEB_DIR, {
 
 // --- API routes ---
 
+// Unauthenticated health/identity endpoint (§4 multi-machine): the phone's
+// machine switcher polls this to show a reachability + identity dot per
+// registered instance without being signed in to each. Exposes no secrets.
+const APP_VERSION = (() => { try { return require('../package.json').version; } catch (e) { return '0'; } })();
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true, app: 'supervisor', version: APP_VERSION, platform: process.platform, hostname: os.hostname() });
+});
+
 app.use('/api/auth', require('./routes/auth'));
 
 // Forced first-login password change (CRIT-3): while the credential is still

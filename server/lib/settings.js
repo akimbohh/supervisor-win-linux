@@ -25,6 +25,9 @@ const DEFAULTS = {
   selfRepoPath: path.resolve(__dirname, '..', '..'), // supervisor's own repo — target for maintenance sessions
   maintenanceSkipPermissions: true, // pass --dangerously-skip-permissions to headless `claude -p` (§6)
   maintenanceTimeoutMs: 600000,     // hard timeout for a headless maintenance run
+  machineLabel: null,               // this instance's display name (§4); null = hostname
+  machinePattern: 'dots',           // identity texture: dots|grid|diag
+  machineHue: 210,                  // identity hue (0-360)
   trustedDevices: {},             // { devId: name } (informational; cookie carries the real trust)
   autoTrustClaudeFolders: true,   // pre-accept ~/.claude.json hasTrustDialogAccepted before spawn
 };

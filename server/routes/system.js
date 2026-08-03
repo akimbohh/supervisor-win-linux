@@ -37,4 +37,40 @@ router.post('/power', async (req, res) => {
   else res.status(500).json({ error: result.error || 'Power action failed' });
 });
 
+// ── Linux-native features (§5). Each is gated on the capability; the adapter
+// helper only exists on the Linux adapter, so unsupported hosts get a clean 400
+// the frontend renders as a disabled section with a reason. ──────────────────
+function requireHelper(name, res) {
+  if (typeof platform[name] !== 'function') { res.status(400).json({ error: 'Not supported on this host' }); return false; }
+  return true;
+}
+
+router.get('/services', async (req, res) => {
+  if (!requireHelper('listServices', res)) return;
+  try { res.json(await platform.listServices()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/services/:unit/:action', async (req, res) => {
+  if (!requireHelper('serviceControl', res)) return;
+  // Controlling services is privileged and destructive — re-confirm the password.
+  const { password } = req.body || {};
+  if (!password || !auth.getCreds() || !auth.verifyPassword(password, auth.getCreds())) return res.status(401).json({ error: 'Wrong password' });
+  try { res.json(await platform.serviceControl(req.params.unit, req.params.action)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/ports', async (req, res) => {
+  if (!requireHelper('listeningPorts', res)) return;
+  try { res.json(await platform.listeningPorts()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/packages', async (req, res) => {
+  if (!requireHelper('packageStatus', res)) return;
+  try { res.json(await platform.packageStatus()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/firewall', async (req, res) => {
+  if (!requireHelper('firewallStatus', res)) return;
+  try { res.json(await platform.firewallStatus()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
