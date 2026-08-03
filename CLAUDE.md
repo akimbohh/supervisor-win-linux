@@ -56,7 +56,9 @@ UI-FEATURE-INVENTORY.md   complete catalogue of every web/ feature (the spec)
 WEB-NEW-AUDIT.md          gap report: web.new vs web (44-row checklist in §13)
 CLAUDE-CODE-PROMPT.md     ready-made prompt to bring web.new to parity
 AUDIT.md                  full code audit (2026-08) — read before refactoring
-docs/updates/             UPDATE-1.1.md … versioned improvement roadmap
+docs/updates/             UPDATE-1.1.md … 1.6.md — versioned improvement roadmap
+                          (1.1 security, 1.2 WS filtering, 1.3 web.new parity,
+                           1.4 Linux parity, 1.5 tests/CI, 1.6 features)
 ```
 
 ## How to run
