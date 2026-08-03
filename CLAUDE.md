@@ -33,22 +33,28 @@ server/                Node backend (Express 4 + ws, CommonJS, no TS, no tests)
     shells.js          shell tabs: node-pty or piped fallback, scrollback files in data/shells/
     metrics.js         persistent PowerShell host (Win) / ps+df (Linux), history ring
     push.js            VAPID web-push, subs in data/push-subs.json, hub 'notify' bridge
-    maintenance.js     singleton headless `claude -p` run in selfRepoPath
+    maintenance.js     singleton headless `claude -p` run in selfRepoPath (flag+timeout fixed)
     claude-config.js   pre-accepts Claude's folder-trust dialog via node-pty
-    restart.js         self-restart via start.bat (Windows-only)
-  routes/              thin Express routers, all behind auth.requireAuth except /api/auth
+    restart.js         thin wrapper → platform.selfRestart()
+    mutex.js           tiny keyed async mutex (serializes RMW on shared JSON)
+  platform/            THE ONLY place that reads process.platform (§3 adapter)
+    index.js           selects win32 | linux | base(posix) for the host
+    capabilities.js    detects+caches what this host can do → GET /api/system/capabilities
+    base.js win32.js linux.js   adapter impls (PS host lives in win32.js)
+  routes/              thin Express routers, all behind auth.requireAuth except /api/auth + /api/ping
     auth.js files.js sessions.js console.js system.js processes.js push.js
     settings.js maintenance.js ws.js
 web/                   PRODUCTION frontend: vanilla JS, no build step, PWA
   app.js               router + WS client + shortcuts + restart banner
+  login.js             login page behavior (externalized so CSP script-src 'self' holds)
   views/ components/   per-tab views; toast/modal/sheet/sparkline/util
+  fonts/               IBM Plex Mono drop-in (README; woff2 not committed)
   vendor/              committed CodeMirror 5 / xterm / pdf.js / highlight.js (via build.js)
-web.new/               REDESIGN prototype: React + Babel-standalone (in-browser JSX), mocked data
-supervisor.js          LEGACY single-file v0 prototype (embedded HTML) — superseded by server/
+redesign/              "Instrument" redesign: docs/design/* spec + no-build prototype
 build.js               copies vendor assets node_modules → web/vendor (npm postinstall)
-start.bat              Windows launcher (kills stale PID, npm install, node server/server.js)
-start-web-new.bat      same but SUPERVISOR_WEB_DIR=web.new
-kill.bat               kills PID-file process + port-7778 listeners
+start.bat / start.sh   launchers (Windows / POSIX); kill.bat / stop.sh
+deploy/                systemd unit + install-linux.sh + README (P-9)
+test/                  node:test suites (paths/auth/markdown/store/mutex/platform/smoke)
 data/                  RUNTIME STATE — gitignored. passwd.json, secret.bin (HMAC key),
                        vapid.json, settings.json, sessions.json, shells.json,
                        session-logs/, shells/ (scrollback), trash/, supervisor.pid
@@ -72,11 +78,12 @@ docs/updates/             UPDATE-1.1.md … 1.6.md — versioned improvement roa
 
 - CommonJS everywhere in `server/`; vanilla ES in `web/` (no modules — files are concatenated into globals via `<script>` order); `web.new/` uses JSX transpiled **in the browser** by Babel-standalone.
 - All persistence is small JSON files via `lib/store.js` (atomic tmp+rename). No DB.
-- Every live update flows through `lib/hub.js` topics → single WebSocket `/ws`. Topic names: `sessions`, `session:<id>`, `shells`, `shell:<id>`, `files:<abs path>`, `system`, `settings`, `maintenance`, `notify` (server-internal).
-- **Known architectural flaw**: `routes/ws.js` broadcasts *every* hub event to *every* client — `ws.subs` is recorded but never used for filtering. Fixing this is planned (UPDATE-1.2); don't build features that depend on the broadcast-all behavior.
-- `paths.js ensureSafe()` is the only guard for file APIs. It is string-prefix based: it does **not** resolve symlinks and does **not** protect `data/` by default. Planned fix in UPDATE-1.1.
-- Session/shell spawn uses `shell:true` with caller-supplied command/args — arbitrary exec by design (post-auth).
-- Windows quirks are everywhere: `taskkill /pid /f /t` instead of SIGKILL, `cmd.exe` fallback shell, persistent PowerShell host in metrics.js, 8.3 paths, `start.bat` PID-file dance. Test mentally against both platforms; repo name is supervisor-win-**linux**.
+- Every live update flows through `lib/hub.js` topics → single WebSocket `/ws`. Topic names: `sessions`, `session:<id>`, `shells`, `shell:<id>`, `files:<abs path>`, `system`, `settings`, `maintenance`, `notify` (server-internal). **`routes/ws.js` now filters delivery by `ws.subs`** (was broadcast-all; fixed HIGH-3) — the global-topic set is `hello`/`pong`/`server`/`settings`.
+- `paths.js ensureSafe()` is the guard for file APIs. It now **resolves real paths** (symlink-safe) and **hard-blocks `data/` + `.env`** unconditionally (fixed MED-1/3). An empty blocklist falls back to defaults; disabling needs `blocklistAllowAll`.
+- Session/shell spawn goes through `platform.spawnManaged` + `killTree`: `shell:true`+`taskkill` on Windows, detached process groups + `process.kill(-pid)` on POSIX. **Do not add `process.platform` checks outside `server/platform/`** — route new platform behavior through the adapter.
+- Capabilities: call `platform.capabilities()` / `GET /api/system/capabilities`; render unsupported features as disabled-with-reason, never hidden.
+- Windows quirks live in `platform/win32.js` (taskkill, `cmd.exe`, persistent PowerShell host, `start.bat`). Test mentally against both platforms; repo name is supervisor-win-**linux**. Windows paths here were only runnable on Linux — flag Windows-only changes for manual verification.
+- Tests: `npm test` (node:test), `npm run lint` (ESLint). Add a regression test with any security/platform fix.
 - Vendor libs are committed under `web/vendor/` — never hand-edit them; change `build.js` instead.
 - `supervisor.js` at the repo root is dead legacy code — do not extend it.
 

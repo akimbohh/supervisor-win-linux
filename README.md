@@ -11,7 +11,12 @@ It's:
 - **System** — CPU (per-core + total), memory, disks, network throughput, GPU (Nvidia), top processes, plus shutdown/restart/sleep with password re-prompt.
 - **Settings** — theme, accent, pinned folders, presets, blocklist, web push notifications, change password, backup/restore.
 
-It's designed for a single user, runs as a background Node service on Windows, and is meant to be reached over a private network like Tailscale.
+It's designed for a single user, runs as a background Node service on **Windows or Linux**, and is meant to be reached over a private network like Tailscale. Windows-desktop-only capabilities (sleep, GPU, drive letters) degrade gracefully on Linux — the app reports what a host can do via `GET /api/system/capabilities` and renders unsupported controls as disabled-with-a-reason rather than hiding or silently breaking them.
+
+> **Linux install:** see [`deploy/README.md`](deploy/README.md) — a `git clone`
+> on Ubuntu 24.04 reaches a boot-persistent systemd install via
+> `deploy/install-linux.sh`. Architecture, changelog, and the multi-machine
+> design live under [`docs/`](docs/).
 
 ---
 
@@ -26,7 +31,17 @@ Double-click **`start.bat`**. It will:
 2. Copy `.env.example` → `.env` if `.env` is missing.
 3. Start the server.
 
-Edit `.env` to set your password before the very first sign-in (or use the default `changeme` and change it from **Settings → Account** afterwards).
+Edit `.env` to set your password before the very first sign-in. If you don't, the fallback password is `supervisor` and the app stays inert (loopback-only, APIs blocked) until you change it from **Settings → Account**.
+
+### Linux
+
+```
+./deploy/install-linux.sh          # deps + node-pty/inotify checks
+sudo ./deploy/install-linux.sh --service   # systemd unit, boot-persistent
+```
+
+or manually: `./start.sh` (and `./stop.sh`). Full path, including the power
+polkit/sudoers rule and the inotify sysctl, is in [`deploy/README.md`](deploy/README.md).
 
 ### Or by hand
 
@@ -68,10 +83,20 @@ Or with NSSM (`nssm install Supervisor`), or via a Scheduled Task with action `n
 | Var | Default | What |
 |---|---|---|
 | `SUPERVISOR_PORT` | `7778` | HTTP port |
-| `SUPERVISOR_BIND` | `0.0.0.0` | Bind address (use `127.0.0.1` to restrict to localhost only) |
+| `SUPERVISOR_BIND` | `0.0.0.0` | Bind address (`127.0.0.1` to restrict to localhost). Forced to loopback while the password is still the default. |
 | `SUPERVISOR_PASSWORD` | `supervisor` | **Only on first run** — sets the initial password, then is ignored |
+| `SUPERVISOR_TRUST_PROXY` | off | Set to `1` only when a real reverse proxy sets `X-Forwarded-For` (otherwise the login rate limit could be bypassed) |
+| `SUPERVISOR_ALLOW_DEFAULT_BIND` | off | `1` to bind non-loopback while the password is still the default (not recommended) |
+| `SUPERVISOR_DATA_DIR` | `./data` | Override the state directory (isolated tests, multiple instances) |
+| `SUPERVISOR_MAX_SHELLS` / `SUPERVISOR_MAX_SESSIONS` | `24` / `32` | Concurrency ceilings |
+| `SUPERVISOR_UPLOAD_MAX_FILE_MB` / `_MAX_FILES` / `_MAX_TOTAL_MB` | `1024` / `50` / `4096` | Upload limits |
+| `SUPERVISOR_NET_IFACES` | (auto) | Comma list of network interfaces to count (default filters docker/veth/tailscale/…) |
 
 All other configuration lives in `data/settings.json` and is editable from the Settings tab.
+
+On **first sign-in with the default password the app is inert** — every API
+except the password change is blocked until you set a real password, and the
+server binds loopback only. Change it, then restart to expose over Tailscale.
 
 ---
 
@@ -140,8 +165,10 @@ build.js                 Copies vendor JS/CSS from node_modules into
 
 ## Permissions and safety
 
-- All API and WebSocket connections require auth.
-- Failed logins are rate-limited per IP with exponential backoff (5s → 15s → 60s → 5m → 30m).
+- All API and WebSocket connections require auth. A strict `Content-Security-Policy` (`script-src 'self'`, no CDN) plus `X-Content-Type-Options`/`X-Frame-Options`/`Referrer-Policy` are set on every response.
+- Failed logins are rate-limited per IP with exponential backoff (5s → 15s → 60s → 5m → 30m), plus a global ceiling that IP rotation can't bypass.
+- Changing the password rotates the cookie-signing key and bumps a token epoch, so every other device is signed out. "Sign out all devices" is `POST /api/auth/logout-all`.
+- The app's own `data/` (password hash, signing key, VAPID key) and `.env` are **always** blocked from the Files API, and the blocklist resolves symlinks so they can't be sidestepped.
 - The path blocklist (Settings → Files) prevents reads/writes inside protected paths. Default Windows blocklist:
   - `C:\Windows`
   - `C:\Program Files\Windows Defender`
@@ -194,4 +221,26 @@ Each category has a per-device toggle.
 
 ## Status
 
-Built end-to-end as one project. Every tab in the spec is wired and working. Vendor assets are committed under `web/vendor/` so a fresh `npm install && npm start` does not need network for anything except the npm registry itself.
+Built end-to-end as one project. Every tab is wired and working on Windows and
+Linux. Vendor assets are committed under `web/vendor/` so a fresh `npm install
+&& npm start` needs the network only for the npm registry.
+
+Recent work (see [`docs/CHANGELOG.md`](docs/CHANGELOG.md)): a security-hardening
+pass (CSP, forced password rotation, revocable sessions, path-safety, upload
+caps, WS subscription filtering), a real cross-platform layer with a capability
+system, a `node:test` suite + ESLint + GitHub Actions CI, a Linux deploy story,
+and the "Instrument" visual redesign (Phase 0 tokens landed; the full frontend
+migration and multi-machine switcher UI are the tracked next steps).
+
+## Developing
+
+```
+npm test        # node:test suite
+npm run lint    # ESLint
+```
+
+Key docs: [`CLAUDE.md`](CLAUDE.md) (orientation), [`AUDIT.md`](AUDIT.md),
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md),
+[`docs/MULTI-MACHINE.md`](docs/MULTI-MACHINE.md), and
+[`redesign/`](redesign/) for the design system.
