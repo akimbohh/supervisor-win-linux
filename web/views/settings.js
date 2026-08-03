@@ -32,7 +32,7 @@ window.SettingsView = async function (root, { app }) {
 
   // Accent
   const accentRow = el('div', { class: 'row gap-2' });
-  for (const [k, color] of [['amber','#f59e0b'],['teal','#14b8a6'],['purple','#a78bfa'],['blue','#60a5fa'],['rose','#fb7185']]) {
+  for (const [k, color] of [['amber','#f5a623'],['teal','#2dd4bf'],['purple','#a78bfa'],['blue','#5ea8ff'],['rose','#fb7185']]) {
     const b = el('button', {
       class: 'btn icon',
       style: { background: color, borderColor: color, width: '36px', height: '36px', boxShadow: s.accent === k ? '0 0 0 2px var(--bg), 0 0 0 4px ' + color : 'none' },
@@ -182,7 +182,7 @@ window.SettingsView = async function (root, { app }) {
   renderPins();
   pinCard.appendChild(pinList);
   const addPinRow = el('div', { class: 'row gap-2' });
-  const pinPath = el('input', { class: 'input mono', placeholder: 'C:\\path\\to\\folder' });
+  const pinPath = el('input', { class: 'input mono', placeholder: 'Absolute path to the folder' });
   const pinName = el('input', { class: 'input', placeholder: 'Display name (optional)' });
   const addPin = el('button', { class: 'btn primary' }); addPin.innerHTML = window.icon('plus', { size: 14 }) + ' Add';
   addPin.addEventListener('click', async () => {
@@ -282,7 +282,7 @@ window.SettingsView = async function (root, { app }) {
   mtCard.appendChild(el('div', { class: 'muted text-sm' },
     'The "?" button in the header opens a "Request a change" modal. Submitting starts a Claude session in the repo below; click "Apply & restart" on that session when ready.'
   ));
-  const mtRepo = el('input', { class: 'input mono', value: s.selfRepoPath || '', placeholder: 'C:\\path\\to\\supervisor' });
+  const mtRepo = el('input', { class: 'input mono', value: s.selfRepoPath || '', placeholder: 'Absolute path to the supervisor repo' });
   const mtSave = el('button', { class: 'btn primary' }, 'Save');
   mtSave.addEventListener('click', async () => {
     const v = mtRepo.value.trim();
@@ -294,6 +294,20 @@ window.SettingsView = async function (root, { app }) {
     el('label', null, 'Supervisor repo path'),
     el('div', { class: 'row gap-2' }, [mtRepo, mtSave]),
   ]));
+
+  // Restart supervisor — wires App.markRestarting() (previously dead, §6) to the
+  // restart flow so the pending→ready banner sequence actually triggers.
+  const restartBtn = el('button', { class: 'btn ghost danger', style: { alignSelf: 'flex-start', marginTop: '8px' } });
+  restartBtn.innerHTML = window.icon('rotate-ccw', { size: 14 }) + ' Restart supervisor';
+  restartBtn.addEventListener('click', async () => {
+    const ok = await window.confirmModal({ title: 'Restart supervisor?', body: 'The server process restarts. The page reconnects automatically.' });
+    if (!ok) return;
+    try {
+      if (window.App && window.App.markRestarting) window.App.markRestarting();
+      await window.api('/api/maintenance/restart', { method: 'POST' });
+    } catch (e) { /* the connection drops as the server exits — expected */ }
+  });
+  mtCard.appendChild(restartBtn);
   wrap.appendChild(mtCard);
 
   // ── Keyboard shortcuts ──

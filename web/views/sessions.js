@@ -407,7 +407,7 @@ window.SessionsView = async function (root, { rest, app }) {
       el('label', null, 'Folder'),
       el('div', { class: 'row gap-2' }),
     ]);
-    const folderInp = el('input', { class: 'input mono', value: folder, placeholder: 'C:\\path\\to\\project' });
+    const folderInp = el('input', { class: 'input mono', value: folder, placeholder: 'Absolute path to the project' });
     folderInp.addEventListener('input', () => { folder = folderInp.value; });
     const browse = el('button', { class: 'btn ghost' });
     browse.innerHTML = window.icon('folder', { size: 14 }) + ' Browse';

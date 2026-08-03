@@ -531,6 +531,9 @@ window.FilesView = async function (root, { rest, app }) {
 
   async function renameFirst() {
     if (!selected.size) return;
+    // Rename is single-item only; with a multi-selection it silently renamed
+    // just the first item (§6). Guard it instead.
+    if (selected.size > 1) { window.toast.error('Select a single item to rename'); return; }
     const p = [...selected][0];
     const cur = window.basename(p);
     const next = await window.promptModal({ title: 'Rename', label: 'New name', initial: cur });
