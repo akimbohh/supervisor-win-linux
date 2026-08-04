@@ -190,8 +190,12 @@ a:hover { text-decoration: underline; }
 .muted { color: var(--text-2); }
 .subtle { color: var(--text-3); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.row { display: flex; align-items: center; gap: 8px; }
-.col { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* Inputs dropped into a flex row share the line instead of each demanding
+   100% width — un-fixed, a row of [input, input, button] wants ~2.5 screens
+   and shoves the layout past the right edge (Settings was the worst case). */
+.row > .input, .row > .textarea, .row > .select { width: auto; flex: 1 1 120px; min-width: 0; }
 .spacer { flex: 1 1 auto; }
 .hidden { display: none !important; }
 
@@ -230,7 +234,12 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.01em;
   margin: 0;
   display: flex; align-items: center; gap: 8px;
+  /* The header must never widen the page: the title yields first. */
+  min-width: 0; flex: 0 1 auto;
 }
+.app-header h1 #page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tight phones: the latency number is the most expendable header item. */
+@media (max-width: 429px) { #latency-badge { display: none !important; } }
 .app-header .logo {
   width: 24px; height: 24px;
   display: grid; place-items: center;
@@ -238,14 +247,22 @@ a:hover { text-decoration: underline; }
   background: var(--accent-soft);
   color: var(--accent);
 }
-.app-header .actions { margin-left: auto; display: flex; gap: 4px; }
+.app-header .actions { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
 
 /* Main content */
 .app-main {
-  overflow: auto;
+  overflow-y: auto;
+  /* A long unbroken string dropped in by any view (a Windows path, a git
+     branch name, a token) must never widen this pane — that's what made
+     Settings visibly stretch: iOS Safari expands the whole layout viewport
+     to fit an overflowing descendant rather than just showing a scrollbar. */
+  overflow-x: hidden;
   padding: 16px;
-  padding-bottom: calc(16px + var(--safe-bot));
+  /* No safe-bot here: the tab bar below (or the keyboard) already covers the
+     home-indicator zone — adding it again floats content ~50px too high. */
+  padding-bottom: 10px;
   min-height: 0;
+  min-width: 0;
 }
 
 /* Tab bar (mobile) */
@@ -323,12 +340,14 @@ a:hover { text-decoration: underline; }
   .tabbar a.active::before { display: none; }
 }
 
-/* ── Buttons ── */
+/* ── Buttons ──
+ * Fully rounded, matching the chat/console pill language (.chat-chip,
+ * .chat-send, .term-tab): square icon buttons round into circles for free. */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   min-height: 36px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-size: 13px;
   font-weight: 500;
@@ -372,8 +391,8 @@ a:hover { text-decoration: underline; }
 
 .btn-group { display: inline-flex; }
 .btn-group .btn { border-radius: 0; margin-left: -1px; }
-.btn-group .btn:first-child { border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); margin-left: 0; }
-.btn-group .btn:last-child { border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+.btn-group .btn:first-child { border-top-left-radius: var(--radius-pill); border-bottom-left-radius: var(--radius-pill); margin-left: 0; }
+.btn-group .btn:last-child { border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); }
 
 /* ── Inputs ── */
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -427,6 +446,10 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-width: 0;
+  /* Same reasoning as .app-main: a long unbroken value (path, token, hash)
+     wraps instead of stretching the card past the viewport. */
+  overflow-wrap: anywhere;
 }
 .card.padded { padding: 16px; }
 .card.hover { transition: border-color var(--t) var(--ease), background var(--t) var(--ease); }
@@ -1110,7 +1133,7 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index
 .chat-jump svg { width:14px; height:14px; }
 
 /* Composer — pill input + round send/stop button */
-.chat-composer { display:flex; padding-top:8px; padding-bottom:6px; }
+.chat-composer { display:flex; padding-top:8px; }
 /* The pill owns everything: + button, textarea, send button. The buttons are
    flex-end-anchored inside it, so they track the pill exactly — single line
    or grown to max-height — with no cross-element height math to drift.

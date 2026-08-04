@@ -134,6 +134,34 @@
     document.getElementById('brand-logo').innerHTML = window.icon('layers', { size: 16 });
     const help = document.getElementById('help-btn');
     if (help) { help.innerHTML = window.icon('help', { size: 18 }); help.onclick = showMaintenanceModal; }
+    const refresh = document.getElementById('refresh-btn');
+    if (refresh) { refresh.innerHTML = window.icon('refresh', { size: 18 }); refresh.onclick = forceRefresh; }
+  }
+
+  // Force refresh — wipes the SW cache and reloads. No confirmation, no
+  // delay: it's one tap away in the header now, so if you tapped it you
+  // meant it (the old Settings-tab version asked first; this replaces it).
+  async function forceRefresh() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg && reg.active) {
+          await new Promise((r) => {
+            const ch = new MessageChannel();
+            ch.port1.onmessage = r;
+            reg.active.postMessage('purgeCache');
+            setTimeout(r, 1500);
+          });
+        }
+        const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (e) {}
+    location.reload();
   }
 
   // ── Hash routing ──

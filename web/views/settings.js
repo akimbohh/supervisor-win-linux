@@ -443,38 +443,7 @@ window.SettingsView = async function (root, { app }) {
     row('App version', '1.0.0'),
   ]));
 
-  const forceRefresh = el('button', { class: 'btn ghost', style: { alignSelf: 'flex-start' } });
-  forceRefresh.innerHTML = window.icon('refresh', { size: 14 }) + ' Force refresh (clear cache)';
-  forceRefresh.title = 'Wipes the service-worker cache and reloads — use if the UI seems stuck on old behaviour after an update.';
-  forceRefresh.addEventListener('click', async () => {
-    if (!await window.confirmModal({
-      title: 'Force refresh?',
-      body: 'Clears all cached app assets and reloads. Useful when an update seems stuck.',
-      confirmText: 'Refresh',
-    })) return;
-    try {
-      // Ask SW to purge, then unregister, then hard-reload.
-      if ('serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.ready.catch(() => null);
-        if (reg && reg.active) {
-          await new Promise((r) => {
-            const ch = new MessageChannel();
-            ch.port1.onmessage = r;
-            reg.active.postMessage('purgeCache');
-            setTimeout(r, 1500);
-          });
-        }
-        const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
-        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
-      }
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map(k => caches.delete(k)));
-      }
-    } catch (e) {}
-    location.reload();
-  });
-  about.appendChild(forceRefresh);
+  about.appendChild(el('div', { class: 'muted text-sm' }, 'Force refresh (clear cache) moved to the header — next to the "?" button.'));
   wrap.appendChild(about);
 
   function row(k, v) {
