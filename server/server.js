@@ -176,6 +176,7 @@ tryMount('/api/processes', './routes/processes');
 tryMount('/api/push', './routes/push');
 tryMount('/api/maintenance', './routes/maintenance');
 tryMount('/api/claude', './routes/claude');
+tryMount('/api/git', './routes/git');
 
 // 404 for unknown API
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

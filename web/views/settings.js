@@ -310,6 +310,81 @@ window.SettingsView = async function (root, { app }) {
   mtCard.appendChild(restartBtn);
   wrap.appendChild(mtCard);
 
+  // ── Sync (GitHub) ──
+  // Commit + push the supervisor repo so Claude's self-edits never sit
+  // uncommitted (which is what blocks a later pull), and pull updates back.
+  wrap.appendChild(sec('Sync (GitHub)'));
+  const syncCard = card();
+  const syncStatus = el('div', { class: 'muted text-sm mono' }, 'Checking…');
+  syncCard.appendChild(syncStatus);
+
+  const commitMsg = el('input', { class: 'input', placeholder: 'Commit message (optional)' });
+  const pushBtn = el('button', { class: 'btn primary' });
+  pushBtn.innerHTML = window.icon('upload', { size: 14 }) + ' Commit & Push';
+  const pullBtn = el('button', { class: 'btn ghost' });
+  pullBtn.innerHTML = window.icon('download', { size: 14 }) + ' Update from GitHub';
+  syncCard.appendChild(el('div', { class: 'field' }, [el('label', null, 'Push Claude’s changes to GitHub'), commitMsg]));
+  syncCard.appendChild(el('div', { class: 'row gap-2', style: { flexWrap: 'wrap' } }, [pushBtn, pullBtn]));
+
+  // Write-only token entry.
+  const tokTitle = el('div', { class: 'section-title', style: { margin: '4px 0 0' } }, 'GitHub token');
+  const tokInp = el('input', { class: 'input mono', type: 'password', placeholder: 'ghp_… (Contents: read/write)' });
+  const tokBtn = el('button', { class: 'btn ghost' }, 'Save token');
+  const tokHelp = el('div', { class: 'muted text-sm' }, 'Stored server-side only, never shown again. Needed to push.');
+  syncCard.appendChild(tokTitle);
+  syncCard.appendChild(el('div', { class: 'row gap-2' }, [tokInp, tokBtn]));
+  syncCard.appendChild(tokHelp);
+  wrap.appendChild(syncCard);
+
+  async function refreshGit() {
+    try {
+      const g = await window.api('/api/git/status');
+      if (!g.isRepo) { syncStatus.textContent = 'Not a git repo (' + g.repo + ')'; return; }
+      const bits = [
+        'branch ' + g.branch,
+        g.dirty ? (g.changeCount + ' uncommitted') : 'clean',
+        g.ahead ? ('↑' + g.ahead) : '',
+        g.behind ? ('↓' + g.behind) : '',
+        g.hasToken ? '' : 'no token',
+      ].filter(Boolean);
+      syncStatus.textContent = bits.join(' · ');
+      pushBtn.disabled = !g.hasToken;
+      tokBtn.textContent = g.hasToken ? 'Replace token' : 'Save token';
+    } catch (e) { syncStatus.textContent = 'Git status unavailable'; }
+  }
+  refreshGit();
+
+  pushBtn.addEventListener('click', async () => {
+    pushBtn.disabled = true;
+    try {
+      const r = await window.api('/api/git/push', { method: 'POST', body: { message: commitMsg.value } });
+      if (r.push && r.push.ok) window.toast.success('Pushed to ' + r.push.branch);
+      else window.toast.error((r.push && r.push.error) || (r.commit && r.commit.error) || 'Push failed');
+      commitMsg.value = '';
+    } catch (e) { window.toast.error(e.message); }
+    finally { pushBtn.disabled = false; refreshGit(); }
+  });
+
+  pullBtn.addEventListener('click', async () => {
+    const ok = await window.confirmModal({
+      title: 'Update from GitHub?',
+      body: 'Fetches the latest and hard-resets this server to match GitHub. Any un-pushed local change is discarded — push first if you want to keep it.',
+      confirmText: 'Update', danger: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await window.api('/api/git/pull', { method: 'POST', body: { hard: true } });
+      if (r.ok) { window.toast.success('Updated — restart to apply'); } else window.toast.error(r.error || r.out || 'Update failed');
+    } catch (e) { window.toast.error(e.message); }
+    finally { refreshGit(); }
+  });
+
+  tokBtn.addEventListener('click', async () => {
+    if (!tokInp.value.trim()) { window.toast.error('Paste a token first'); return; }
+    try { await window.api('/api/git/token', { method: 'POST', body: { token: tokInp.value.trim() } }); tokInp.value = ''; window.toast.success('Token saved'); refreshGit(); }
+    catch (e) { window.toast.error(e.message); }
+  });
+
   // ── Keyboard shortcuts ──
   wrap.appendChild(sec('Keyboard shortcuts'));
   const ksCard = card();
