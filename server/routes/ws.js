@@ -29,7 +29,7 @@ function setup(server, { onMessage } = {}) {
   const GLOBAL_TOPICS = new Set(['hello', 'pong', 'server', 'settings']);
   // High-frequency topics we drop for a client whose send buffer is backed up,
   // rather than growing an unbounded queue on a slow link.
-  const LOSSY_PREFIXES = ['system', 'shell:', 'session:'];
+  const LOSSY_PREFIXES = ['system', 'shell:', 'session:', 'claude:'];
   const MAX_BUFFERED = 1 << 20; // 1 MB
 
   function isLossy(topic) {

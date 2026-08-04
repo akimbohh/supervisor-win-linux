@@ -77,6 +77,7 @@ function compute() {
     headless,
     virt,                                // 'none' | 'kvm' | 'docker' | ... | null(unknown)
     pty: ptyAvailable(),
+    claude: commandExists('claude'),    // Claude Code CLI present → Interactive Claude usable
     gpu: commandExists('nvidia-smi') || commandExists('rocm-smi'),
     power: {
       shutdown: true,

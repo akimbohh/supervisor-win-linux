@@ -175,6 +175,7 @@ tryMount('/api/system', './routes/system');
 tryMount('/api/processes', './routes/processes');
 tryMount('/api/push', './routes/push');
 tryMount('/api/maintenance', './routes/maintenance');
+tryMount('/api/claude', './routes/claude');
 
 // 404 for unknown API
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
@@ -242,6 +243,7 @@ function shutdown(sig) {
   // Tell feature modules to clean up if they exposed a closer.
   try { require('./lib/sessions').closeAll && require('./lib/sessions').closeAll(); } catch (e) {}
   try { require('./lib/shells').closeAll && require('./lib/shells').closeAll(); } catch (e) {}
+  try { require('./lib/interactive').closeAll && require('./lib/interactive').closeAll(); } catch (e) {}
   try { require('./lib/metrics').close && require('./lib/metrics').close(); } catch (e) {}
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 5000).unref();
