@@ -38,7 +38,14 @@ window.InteractiveView = async function (root, { rest, app }) {
 
   // Top bar: cwd + permission mode + conversation menu
   const cwdInp = el('input', { class: 'input mono', value: cwd, placeholder: 'Working directory (absolute path)', style: { flex: '1' } });
-  cwdInp.addEventListener('change', () => { cwd = cwdInp.value.trim(); localStorage.setItem('claude.cwd', cwd); loadConversations(); });
+  cwdInp.addEventListener('change', () => {
+    cwd = cwdInp.value.trim(); localStorage.setItem('claude.cwd', cwd);
+    // A resumed session belongs to its folder — changing folders starts fresh,
+    // otherwise --resume runs in the wrong project and claude exits 1.
+    sessionId = null;
+    hint.textContent = 'New conversation in ' + (cwd || 'the home folder') + '.';
+    loadConversations();
+  });
 
   const permSeg = el('div', { class: 'seg' });
   for (const m of ['default', 'plan', 'acceptEdits']) {
@@ -148,7 +155,12 @@ window.InteractiveView = async function (root, { rest, app }) {
       if (p.type === 'session' && p.sessionId) { sessionId = p.sessionId; }
       else if (p.type === 'claude_json') renderClaude(p.data);
       else if (p.type === 'stderr') { /* ignore chatty stderr; surface on error only */ }
-      else if (p.type === 'error') { window.toast.error(p.error || 'Claude error'); finalize(topic); }
+      else if (p.type === 'error') {
+        const msg = p.error || 'Claude error';
+        bubble('assistant', el('div', { class: 'mono text-sm', style: { color: 'var(--danger)', whiteSpace: 'pre-wrap' } }, msg));
+        window.toast.error(msg.length > 120 ? msg.slice(0, 120) + '…' : msg);
+        finalize(topic);
+      }
       else if (p.type === 'aborted') { bubble('assistant', el('div', { class: 'muted text-sm' }, '— stopped —')); finalize(topic); }
       else if (p.type === 'done') { if (p.sessionId) sessionId = p.sessionId; finalize(topic); }
     });

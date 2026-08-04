@@ -18,7 +18,10 @@ const crypto = require('crypto');
 const hub = require('./hub');
 const { ensureSafe } = require('./paths');
 const settings = require('./settings');
+const claudeConfig = require('./claude-config');
 const platform = require('../platform');
+
+const STDERR_KEEP = 4000; // tail of stderr surfaced on a non-zero exit
 
 const MAX_RUNS = parseInt(process.env.SUPERVISOR_MAX_CLAUDE_RUNS || '8', 10);
 const runs = new Map(); // requestId -> { proc, requestId, cwd, sessionId, startedAt, buf }
@@ -65,7 +68,9 @@ function previewOf(msg) {
 function count() { return runs.size; }
 
 // Start a streaming Claude run. Returns { requestId, topic, sessionId? }.
-function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
+// async: a first run in an untrusted folder must accept Claude's workspace-trust
+// dialog first, or `claude` exits 1 (the "code 1 in a different folder" bug).
+async function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
   if (!platform.capabilities().claude) {
     const e = new Error('Claude Code CLI not found on this host'); e.code = 'ENOCLAUDE'; throw e;
   }
@@ -77,6 +82,17 @@ function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
   if (runs.size >= MAX_RUNS) {
     const e = new Error('Too many Claude runs (' + MAX_RUNS + '). Stop one first.'); e.code = 'ELIMIT'; throw e;
   }
+
+  // Pre-accept Claude's workspace-trust dialog for this folder (cached per
+  // folder; ~1.5s only on first use). Without it, `claude -p` refuses an
+  // untrusted folder and exits 1. Best-effort — don't block the run if it fails.
+  if (settings.get().autoTrustClaudeFolders !== false) {
+    try { await claudeConfig.trustFolderInteractive(workdir); } catch (e) {}
+  }
+  // A resume id belongs to the folder it was created in; resuming it in a
+  // different cwd makes claude exit 1. Only pass --resume when the session
+  // actually lives under this workdir.
+  if (sessionId && !conversationExists(workdir, sessionId)) sessionId = null;
 
   const args = ['-p', '--output-format', 'stream-json', '--verbose'];
   if (sessionId) args.push('--resume', String(sessionId));
@@ -97,7 +113,7 @@ function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
     const err = new Error('Failed to spawn claude: ' + e.message); err.code = 'ESPAWN'; throw err;
   }
 
-  const run = { proc, requestId, cwd: workdir, sessionId: sessionId || null, startedAt: Date.now(), buf: '' };
+  const run = { proc, requestId, cwd: workdir, sessionId: sessionId || null, startedAt: Date.now(), buf: '', errBuf: '' };
   runs.set(requestId, run);
 
   // Pipe the prompt on stdin (avoids arg-quoting issues), then close it.
@@ -115,6 +131,7 @@ function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
     }
   });
   proc.stderr && proc.stderr.on('data', (chunk) => {
+    run.errBuf = (run.errBuf + chunk.toString()).slice(-STDERR_KEEP);
     hub.publish(topic, { type: 'stderr', data: chunk.toString() });
   });
   proc.on('error', (err) => {
@@ -124,7 +141,15 @@ function start({ message, sessionId, cwd, permissionMode, allowedTools } = {}) {
   proc.on('exit', (code, signal) => {
     // Flush any trailing partial line.
     if (run.buf) { try { const obj = JSON.parse(run.buf); hub.publish(topic, { type: 'claude_json', data: obj }); } catch (e) {} }
-    hub.publish(topic, signal ? { type: 'aborted' } : (code === 0 ? { type: 'done', sessionId: run.sessionId } : { type: 'error', error: 'claude exited with code ' + code }));
+    if (signal) {
+      hub.publish(topic, { type: 'aborted' });
+    } else if (code === 0) {
+      hub.publish(topic, { type: 'done', sessionId: run.sessionId });
+    } else {
+      // Surface claude's actual stderr instead of an opaque exit code.
+      const detail = (run.errBuf || '').trim();
+      hub.publish(topic, { type: 'error', error: 'claude exited with code ' + code + (detail ? ': ' + detail.slice(-800) : '') });
+    }
     runs.delete(requestId);
   });
 
@@ -147,6 +172,14 @@ function listRuns() {
 // directory whose name is the project path with separators replaced by dashes.
 
 function projectsRoot() { return path.join(os.homedir(), '.claude', 'projects'); }
+
+// Does a resumable conversation with this id exist under this cwd? Used to avoid
+// passing --resume across folders (which makes claude exit 1).
+function conversationExists(cwd, sessionId) {
+  if (!sessionId || !/^[\w-]+$/.test(String(sessionId))) return false;
+  try { return fs.existsSync(path.join(projectsRoot(), encodeCwd(cwd), sessionId + '.jsonl')); }
+  catch (e) { return false; }
+}
 
 // The encoding Claude uses isn't reversible (both '/' and '-' map to '-'), so we
 // list all project dirs and, for a cwd filter, match on the encoded form.
@@ -225,5 +258,5 @@ module.exports = {
   start, abort, listRuns, count, closeAll,
   listProjects, listConversations, readConversation,
   // exported for tests
-  splitLines, sessionIdOf, previewOf, encodeCwd,
+  splitLines, sessionIdOf, previewOf, encodeCwd, conversationExists,
 };

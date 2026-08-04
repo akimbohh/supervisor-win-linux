@@ -39,17 +39,20 @@ test('encodeCwd matches Claude on-disk project layout', () => {
   assert.ok(!it.encodeCwd('/a/b').includes('/'));
 });
 
-test('start refuses without the claude capability', () => {
-  // On a host without `claude`, start must throw ENOCLAUDE rather than spawn.
+test('start refuses without the claude capability', async () => {
+  // On a host without `claude`, start must reject ENOCLAUDE rather than spawn.
   const caps = require('../server/platform/capabilities');
   if (!caps.get().claude) {
-    assert.throws(() => it.start({ message: 'hi' }), (e) => e.code === 'ENOCLAUDE');
+    await assert.rejects(it.start({ message: 'hi' }), (e) => e.code === 'ENOCLAUDE');
   }
 });
 
-test('start validates its message', () => {
-  const caps = require('../server/platform/capabilities');
-  if (caps.get().claude) {
-    assert.throws(() => it.start({ message: '' }), (e) => e.code === 'EINVAL' || e.code === 'ENOCLAUDE');
-  }
+test('start validates its message (async)', async () => {
+  // start() is async (it accepts the folder-trust dialog before spawning), so
+  // it rejects rather than throwing synchronously.
+  await assert.rejects(it.start({ message: '' }), (e) => e.code === 'EINVAL' || e.code === 'ENOCLAUDE');
+});
+
+test('conversationExists guards resume across folders', () => {
+  assert.equal(it.conversationExists && it.conversationExists('/nope', 'deadbeef'), false);
 });

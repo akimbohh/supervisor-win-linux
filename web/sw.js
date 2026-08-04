@@ -6,7 +6,7 @@
 //     never change between releases, no point re-fetching.
 //   - /api/* and /ws: network-only (never cached, never intercepted).
 
-const CACHE = 'supervisor-shell-v20';
+const CACHE = 'supervisor-shell-v21';
 const PRECACHE = [
   '/',
   '/login',

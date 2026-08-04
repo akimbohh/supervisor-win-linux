@@ -19,10 +19,10 @@ function mapErr(res, e) {
 }
 
 // Start a streaming run. The client subscribes to the returned topic first.
-router.post('/chat', (req, res) => {
+router.post('/chat', async (req, res) => {
   try {
     const { message, sessionId, cwd, permissionMode, allowedTools } = req.body || {};
-    const r = interactive.start({ message, sessionId, cwd, permissionMode, allowedTools });
+    const r = await interactive.start({ message, sessionId, cwd, permissionMode, allowedTools });
     res.json(r);
   } catch (e) { mapErr(res, e); }
 });
