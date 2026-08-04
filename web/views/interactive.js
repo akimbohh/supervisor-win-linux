@@ -51,9 +51,10 @@ window.InteractiveView = async function (root, { rest, app }) {
   let homeDir = null;          // lazy: upload destination when cwd is Home
 
   // Per-transcript render state
-  let toolsBox = null;          // current .chat-tools group (reset when text arrives)
-  let toolById = {};            // tool_use id -> <details> (for attaching results)
-  let lastTool = null;
+  let toolCard = null;          // current ToolCard underlay (reset when text arrives)
+  let cardById = {};            // tool_use id -> ToolCard (for attaching results)
+  let lastCard = null;          // fallback for results that arrive without an id
+  const viewCards = new Set();  // every card this transcript created (turn-end settle)
   let lastAssistantText = '';
   let welcome = null;
 
@@ -208,8 +209,9 @@ window.InteractiveView = async function (root, { rest, app }) {
   }
 
   function clearChat() {
+    if (window.ToolCard) window.ToolCard.closeAll(); // tear down overlays + timers
     inner.innerHTML = '';
-    toolsBox = null; toolById = {}; lastTool = null; lastAssistantText = ''; welcome = null;
+    toolCard = null; cardById = {}; lastCard = null; viewCards.clear(); lastAssistantText = ''; welcome = null;
     jump.classList.add('hidden');
     if (jump.parentNode !== scroller) scroller.appendChild(jump);
   }
@@ -247,7 +249,7 @@ window.InteractiveView = async function (root, { rest, app }) {
   }
 
   function addUser(text) {
-    toolsBox = null;
+    toolCard = null;
     addNode(el('div', { class: 'chat-msg user' }, text));
   }
   // Does a reply read like "the server needs a restart"? Fuel for the
@@ -264,7 +266,7 @@ window.InteractiveView = async function (root, { rest, app }) {
   }
 
   function addAssistantText(text) {
-    toolsBox = null;
+    toolCard = null;
     const d = el('div', { class: 'chat-md' });
     if (window.renderMarkdown) d.innerHTML = window.renderMarkdown(text);
     else { d.style.whiteSpace = 'pre-wrap'; d.textContent = text; }
@@ -275,50 +277,26 @@ window.InteractiveView = async function (root, { rest, app }) {
   function addError(text) { addNode(el('div', { class: 'chat-error' }, text)); }
   function addMeta(text) { addNode(el('div', { class: 'chat-meta' }, text)); }
 
-  // Human-readable one-liners for tool calls; raw detail stays behind a tap.
-  function toolIcon(name) {
-    return ({ Read: 'eye', Edit: 'edit', MultiEdit: 'edit', Write: 'edit', NotebookEdit: 'edit',
-      Bash: 'terminal', Grep: 'search', Glob: 'search', LS: 'folder',
-      WebFetch: 'globe', WebSearch: 'globe', TodoWrite: 'check', Task: 'zap' })[name] || 'zap';
-  }
-  function toolLabel(name, input) {
-    input = input || {};
-    const base = (p) => window.basename(String(p || '')) || trunc(p, 40);
-    switch (name) {
-      case 'Read':      return 'Read ' + base(input.file_path || input.path || input.notebook_path);
-      case 'Edit': case 'MultiEdit': case 'NotebookEdit': return 'Edited ' + base(input.file_path || input.notebook_path);
-      case 'Write':     return 'Wrote ' + base(input.file_path);
-      case 'Bash':      return 'Ran ' + trunc(input.command || 'a command', 60);
-      case 'Grep':      return 'Searched for ' + trunc(input.pattern || '…', 40);
-      case 'Glob':      return 'Looked for files ' + trunc(input.pattern || '…', 40);
-      case 'LS':        return 'Listed ' + base(input.path || 'folder');
-      case 'WebFetch':  return 'Fetched ' + trunc(input.url || 'a page', 50);
-      case 'WebSearch': return 'Searched the web for ' + trunc(input.query || '…', 40);
-      case 'TodoWrite': return 'Updated its to-do list';
-      case 'Task':      return 'Ran a helper agent';
-      default:          return 'Used ' + name;
-    }
-  }
+  // Tool calls render through the ToolCard underlay (components/toolcard.js):
+  // one card per contiguous run of calls, each new call feeding a single
+  // fixed slot instead of stacking rows. Labels/detail live in the component.
   function addTool(id, name, input) {
-    if (!toolsBox) { toolsBox = el('div', { class: 'chat-tools' }); addNode(toolsBox); }
-    const det = el('details', { class: 'chat-tool' });
-    const sum = el('summary');
-    sum.innerHTML = window.icon(toolIcon(name), { size: 14 })
-      + '<span class="lbl"></span><span class="chev">' + window.icon('chevron-right', { size: 14 }) + '</span>';
-    sum.querySelector('.lbl').textContent = toolLabel(name, input);
-    det.appendChild(sum);
-    det.appendChild(el('div', { class: 'part' }, 'Input'));
-    det.appendChild(el('pre', null, trunc(JSON.stringify(input == null ? {} : input, null, 2), 4000)));
-    toolsBox.appendChild(det);
-    if (id) toolById[id] = det;
-    lastTool = det;
-    if (atBottom()) forceScroll();
+    if (!toolCard) {
+      toolCard = window.ToolCard.create();
+      viewCards.add(toolCard);
+      addNode(toolCard.el);
+    }
+    toolCard.addCall(id, name, input, !hydrating);
+    if (id) cardById[id] = toolCard;
+    lastCard = toolCard;
   }
-  function addToolResult(id, text) {
-    const det = (id && toolById[id]) || lastTool;
-    if (!det) return;
-    det.appendChild(el('div', { class: 'part' }, 'Result'));
-    det.appendChild(el('pre', null, trunc(text, 4000)));
+  function addToolResult(id, text, isError) {
+    const card = (id && cardById[id]) || lastCard;
+    if (card) card.addResult(id, text, isError);
+  }
+  // Turn over — freeze any still-"running" calls (failed=true on error/abort).
+  function settleCards(failed) {
+    for (const c of viewCards) c.settle(failed);
   }
 
   function renderClaude(data) {
@@ -333,7 +311,7 @@ window.InteractiveView = async function (root, { rest, app }) {
       for (const block of data.message.content) {
         if (block.type === 'tool_result') {
           const c = Array.isArray(block.content) ? block.content.map(x => x.text || '').join('') : (block.content || '');
-          addToolResult(block.tool_use_id, String(c));
+          addToolResult(block.tool_use_id, String(c), block.is_error === true);
         }
       }
     } else if (t === 'result') {
@@ -380,9 +358,9 @@ window.InteractiveView = async function (root, { rest, app }) {
     else if (p.type === 'session') { if (p.sessionId) { sessionId = p.sessionId; saveActive(); } }
     else if (p.type === 'claude_json') renderClaude(p.data);
     else if (p.type === 'stderr') { /* ignore chatty stderr; surface on error only */ }
-    else if (p.type === 'error') { addError(p.error || 'Claude error'); finalize(); }
-    else if (p.type === 'aborted') { addMeta('Stopped'); finalize(); }
-    else if (p.type === 'done') { if (p.sessionId) sessionId = p.sessionId; saveActive(); finalize(); maybeOfferRestart(); }
+    else if (p.type === 'error') { addError(p.error || 'Claude error'); settleCards(true); finalize(); }
+    else if (p.type === 'aborted') { addMeta('Stopped'); settleCards(true); finalize(); }
+    else if (p.type === 'done') { if (p.sessionId) sessionId = p.sessionId; saveActive(); settleCards(false); finalize(); maybeOfferRestart(); }
   }
 
   // The turn's reply said the server needs a restart → ask instead of assuming.
@@ -535,7 +513,7 @@ window.InteractiveView = async function (root, { rest, app }) {
           if (b.type === 'text' && b.text && b.text.trim()) addUser(b.text);
           else if (b.type === 'tool_result') {
             const txt = Array.isArray(b.content) ? b.content.map(x => x.text || '').join('') : (b.content || '');
-            addToolResult(b.tool_use_id, String(txt));
+            addToolResult(b.tool_use_id, String(txt), b.is_error === true);
           }
         }
       }
@@ -931,6 +909,7 @@ window.InteractiveView = async function (root, { rest, app }) {
     // It must NOT abort the run — server chats outlive their clients.
     destroy() {
       setTopic(null);
+      if (window.ToolCard) window.ToolCard.closeAll();
       if (unsub) unsub();
       document.removeEventListener('visibilitychange', onForeground);
       window.removeEventListener('pageshow', onForeground);

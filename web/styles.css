@@ -892,7 +892,7 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index
 /* ── Claude chat (Interactive Claude tab) ──────────────────────────────────
  * Deliberately chat-app-like (ChatGPT/iMessage), mobile-first. The view fills
  * the main area; only .chat-scroll scrolls; the composer stays pinned. */
-.chat { display:flex; flex-direction:column; height:100%; min-height:0; }
+.chat { display:flex; flex-direction:column; height:100%; min-height:0; position:relative; }
 
 /* Context strip: folder + mode chips, history / new-chat on the right */
 .chat-top { display:flex; align-items:center; gap:6px; padding-bottom:8px; min-width:0; }
@@ -935,30 +935,104 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index
 .chat-md .md-code { font-size:12.5px; word-break:break-all; }
 .chat-md a { word-break:break-all; }
 
-/* Tool activity: grouped, one human line per tool, tap to expand raw detail */
-.chat-tools { border:1px solid var(--border-soft); border-radius:var(--radius-lg); background:var(--surface-1); overflow:hidden; }
-.chat-tool { border-bottom:1px solid var(--border-soft); }
-.chat-tool:last-child { border-bottom:0; }
-.chat-tool summary {
-  display:flex; align-items:center; gap:8px;
-  padding:0 12px; min-height:40px; cursor:pointer;
-  font-family:var(--mono); font-size:12px; color:var(--text-2);
-  list-style:none; user-select:none;
+/* ── Tool activity: the "underlay" card (components/toolcard.js) ──────────
+ * ONE card per run of tool calls. The .tc element reserves a fixed 48px in
+ * the message flow; the .tc-slot inside is absolutely positioned so the feed
+ * swap never reflows the transcript and stage-1 expansion OVERLAYS the chat
+ * (height animates px→px on the overlay only — no layout jump below it). */
+.tc { position:relative; height:48px; flex:none; }
+.tc.open1 { z-index:6; }
+.tc-slot {
+  position:absolute; top:0; left:0; right:0; height:48px;
+  display:flex; flex-direction:column;
+  border:1px solid var(--border-soft); border-radius:var(--radius-lg);
+  background:var(--surface-1); overflow:hidden;
+  transition:height 280ms cubic-bezier(0.22,0.61,0.36,1), box-shadow 280ms var(--ease), border-color var(--t) var(--ease);
 }
-.chat-tool summary::-webkit-details-marker { display:none; }
-.chat-tool summary > svg:first-child { width:14px; height:14px; flex-shrink:0; color:var(--text-3); }
-.chat-tool summary .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-.chat-tool summary .chev { margin-left:auto; flex-shrink:0; color:var(--text-4); transition:transform var(--t) var(--ease); }
-.chat-tool summary .chev svg { width:14px; height:14px; display:block; }
-.chat-tool[open] summary .chev { transform:rotate(90deg); }
-.chat-tool pre {
-  margin:0; padding:8px 12px;
-  font-family:var(--mono); font-size:11px; line-height:1.5;
-  color:var(--text-2); background:var(--surface-2);
-  white-space:pre-wrap; word-break:break-word;
-  max-height:240px; overflow:auto;
+.tc.open1 .tc-slot { box-shadow:var(--sh-4); border-color:var(--border-strong); }
+.tc-head { flex:none; height:46px; display:flex; align-items:center; gap:8px; padding:0 10px 0 12px; cursor:pointer; user-select:none; }
+.tc-faces { flex:1 1 auto; min-width:0; position:relative; height:100%; overflow:hidden; }
+.tc-face { position:absolute; inset:0; display:flex; align-items:center; gap:8px; min-width:0; will-change:transform,opacity; }
+.tc-face > svg { flex-shrink:0; color:var(--text-3); }
+.tc-face .tc-lbl { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:12px; color:var(--text-2); }
+.tc-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--text-4); }
+.tc-dot.running { background:var(--accent); animation:tc-pulse 1.2s var(--ease) infinite; }
+.tc-dot.done { background:var(--ok); }
+.tc-dot.failed { background:var(--danger); }
+@keyframes tc-pulse { 0%,100%{ box-shadow:0 0 0 0 var(--accent-soft); } 50%{ box-shadow:0 0 0 4px var(--accent-soft); } }
+.tc-face .tc-time, .tc-hist .tc-time, .tc-sheet-row .tc-time {
+  flex-shrink:0; font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums;
+  color:var(--text-4); min-width:34px; text-align:right; }
+.tc-count {
+  flex-shrink:0; padding:3px 9px; border-radius:var(--radius-pill);
+  border:1px solid var(--border); background:var(--surface-2); color:var(--text-3);
+  font-size:11px; font-weight:600; white-space:nowrap; cursor:pointer;
+  transition:background var(--t) var(--ease);
 }
-.chat-tool .part { padding:4px 12px 2px; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-4); background:var(--surface-2); }
+.tc-count:hover { background:var(--surface-3); color:var(--text-2); }
+.tc-body { flex:1 1 auto; min-height:0; overflow:auto; opacity:0; transition:opacity 180ms var(--ease) 80ms; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; cursor:pointer; }
+.tc.open1 .tc-body { opacity:1; }
+
+/* Stage-1 detail */
+.tc-detail { padding:4px 12px 12px; display:flex; flex-direction:column; gap:8px; }
+.tc-cmd { display:flex; gap:8px; font-family:var(--mono); font-size:12px; color:var(--text); word-break:break-all; }
+.tc-cmd .ps { color:var(--accent); flex-shrink:0; }
+.tc-out { margin:0; font-family:var(--mono); font-size:11px; line-height:1.5; color:var(--text-2); background:var(--surface-2); border-radius:var(--radius); padding:8px 10px; white-space:pre-wrap; word-break:break-word; }
+.tc-path { font-family:var(--mono); font-size:11px; color:var(--text-3); word-break:break-all; }
+.tc-sub { font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-4); }
+.tc-stats { display:flex; gap:6px; font-family:var(--mono); font-size:11px; font-weight:600; }
+.tc-stats .add { color:var(--ok); }
+.tc-stats .del { color:var(--danger); }
+.tc-stats .muted { color:var(--text-4); font-weight:400; }
+
+/* Diff (stage-1 mini + stage-2 full): +/− gutters, hljs colors the code */
+.tc-diff { font-family:var(--mono); font-size:11px; line-height:1.55; border:1px solid var(--border-soft); border-radius:var(--radius); overflow-x:auto; background:var(--surface-2); }
+.tc-diff.full { font-size:12px; }
+.tc-hunk { border-bottom:1px dashed var(--border-soft); padding:4px 0; }
+.tc-hunk:last-child { border-bottom:0; }
+.tc-diff .dl { display:flex; white-space:pre; }
+.tc-diff .dl .g { flex:none; width:22px; text-align:center; color:var(--text-4); user-select:none; }
+.tc-diff .dl .t { flex:1 1 auto; padding-right:10px; }
+.tc-diff .dl.add { background:var(--ok-soft); }
+.tc-diff .dl.add .g { color:var(--ok); }
+.tc-diff .dl.del { background:var(--danger-soft); }
+.tc-diff .dl.del .g { color:var(--danger); }
+.tc-more { padding:4px 10px; color:var(--text-4); font-size:11px; }
+
+/* "N new" pill (pinned card) + chat dim behind the stage-1 panel */
+.tc-newpill {
+  position:absolute; top:-10px; left:50%; transform:translateX(-50%); z-index:7;
+  padding:3px 10px; border-radius:var(--radius-pill);
+  background:var(--accent); color:var(--accent-on);
+  font-size:11px; font-weight:600; box-shadow:var(--sh-4); cursor:pointer; white-space:nowrap;
+}
+.tc-newpill.sheet { top:auto; margin-top:6px; position:absolute; }
+.tc-dim { position:absolute; inset:0; z-index:5; background:rgba(0,0,0,0); transition:background 200ms var(--ease); }
+.tc-dim.on { background:rgba(0,0,0,0.28); }
+
+/* Stage-2 full-screen payload sheet */
+.tc-sheet {
+  position:fixed; inset:0; z-index:58; display:flex; flex-direction:column;
+  background:var(--bg); transform:translateY(100%);
+  transition:transform 280ms var(--ease-sheet);
+}
+.tc-sheet.on { transform:translateY(0); }
+.tc-sheet.rm { transform:none; opacity:0; transition:opacity 120ms var(--ease); }
+.tc-sheet.rm.on { opacity:1; }
+.tc-sheet-head { flex:none; padding:6px 10px 8px; padding-top:calc(6px + env(safe-area-inset-top)); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+.tc-sheet-head .grab { width:36px; height:4px; background:var(--text-4); border-radius:4px; margin:2px auto 8px; }
+.tc-sheet-row { display:flex; align-items:center; gap:8px; }
+.tc-sheet-row .tc-face { position:static; flex:1 1 auto; min-width:0; }
+.tc-sheet-body { flex:1 1 auto; min-height:0; overflow:auto; padding:12px 14px calc(16px + env(safe-area-inset-bottom)); overscroll-behavior:contain; -webkit-overflow-scrolling:touch; position:relative; }
+.tc-scrollback { margin:0; font-family:var(--mono); font-size:12px; line-height:1.55; white-space:pre-wrap; word-break:break-word; color:var(--text-2); }
+.tc-payload { display:flex; flex-direction:column; gap:10px; }
+
+/* Step-history rows (bottom sheet from the "N steps" badge) */
+.tc-hist { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; border-bottom:1px solid var(--border-soft); cursor:pointer; font-family:var(--mono); font-size:12px; color:var(--text-2); }
+.tc-hist:last-child { border-bottom:0; }
+.tc-hist .n { flex:none; width:22px; text-align:right; color:var(--text-4); font-size:11px; }
+.tc-hist svg { flex:none; color:var(--text-3); }
+.tc-hist .lbl { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* Status rows */
 .chat-thinking { display:flex; align-items:center; gap:8px; color:var(--text-3); font-size:13px; padding:2px 0; }
