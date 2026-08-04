@@ -33,6 +33,7 @@ server/                Node backend (Express 4 + ws, CommonJS, no TS, no tests)
     shells.js          shell tabs: node-pty or piped fallback, scrollback files in data/shells/
     metrics.js         persistent PowerShell host (Win) / ps+df (Linux), history ring
     push.js            VAPID web-push, subs in data/push-subs.json, hub 'notify' bridge
+    interactive.js     Interactive Claude: streaming `claude -p --stream-json` chat, resume by session_id
     maintenance.js     singleton headless `claude -p` run in selfRepoPath (flag+timeout fixed)
     claude-config.js   pre-accepts Claude's folder-trust dialog via node-pty
     restart.js         thin wrapper → platform.selfRestart()

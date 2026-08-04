@@ -124,6 +124,20 @@ forbids. Rationale in `docs/DECISION-web-new.md`.
 - The redesign source (direction, system spec, prototype, checklist) is
   committed under `redesign/`.
 
+## Interactive Claude (new feature)
+
+A streaming chat UI for Claude Code (the **Claude** tab), reimplemented natively
+from the `sugyan/claude-code-webui` contract on Supervisor's stack (vanilla JS +
+Express + WS hub — no React/Vite/CDN). `server/lib/interactive.js` drives
+`claude -p --output-format stream-json` over the platform adapter and streams
+NDJSON `SDKMessage`s on `claude:<requestId>`; `server/routes/claude.js` exposes
+chat/abort/runs/projects/conversations behind auth, gated on a new `claude`
+capability. Interchangeable with Console/Sessions via Claude's `session_id` +
+`--resume` (one live driver per conversation): Interactive→Console opens a shell
+`claude --resume <id>`, Sessions→Interactive opens the Claude tab at the folder,
+and the `?` "Request a change" flow now defaults to Interactive Claude. Design +
+limitations in `docs/INTERACTIVE-CLAUDE.md`; pure stream helpers unit-tested.
+
 ## Tests / CI (§9)
 
 - `node:test` suite (23 tests): path safety, auth (tokens/epoch/rate-limit),
