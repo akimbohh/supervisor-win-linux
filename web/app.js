@@ -72,6 +72,7 @@
   }
 
   const VIEWS = {
+    claude:    () => window.InteractiveView,
     sessions:  () => window.SessionsView,
     files:     () => window.FilesView,
     console:   () => window.ConsoleView,
@@ -84,7 +85,7 @@
     const { tab, rest } = parseHash();
     setActiveTab(tab);
     document.getElementById('page-title').textContent = ({
-      sessions:'Sessions', files:'Files', console:'Console', processes:'Processes', system:'System', settings:'Settings'
+      claude:'Claude', sessions:'Sessions', files:'Files', console:'Console', processes:'Processes', system:'System', settings:'Settings'
     })[tab] || 'Supervisor';
 
     // Same tab + view supports incremental routing → no re-mount.
@@ -314,8 +315,22 @@
       } catch (e) { window.toast.error(e.message); }
     }
 
-    const interactiveBtn = el('button', { class: 'btn primary' }, 'Open in interactive Claude');
-    interactiveBtn.title = 'Opens a Console shell with `claude` running and pastes your prompt; the prompt is also copied to your clipboard.';
+    // Primary path: open the Interactive Claude tab pre-filled (the default
+    // interactive-Claude experience). The Console hand-off remains as a
+    // secondary option for a raw terminal.
+    function openInteractiveClaude() {
+      const text = ta.value.trim();
+      if (!text) { window.toast.error('Enter a description first'); return; }
+      try { localStorage.setItem('claude.pendingMessage', text); } catch (e) {}
+      handle.close();
+      location.hash = '#claude';
+    }
+    const claudeBtn = el('button', { class: 'btn primary' }, 'Ask Interactive Claude');
+    claudeBtn.title = 'Opens the Claude tab with your prompt ready to send.';
+    claudeBtn.addEventListener('click', openInteractiveClaude);
+
+    const interactiveBtn = el('button', { class: 'btn ghost' }, 'Open in terminal');
+    interactiveBtn.title = 'Opens a Console shell with `claude` running and pastes your prompt.';
     interactiveBtn.addEventListener('click', openInteractive);
 
     handle = window.modal.open({
@@ -328,7 +343,7 @@
     });
 
     const footer = handle.el.querySelector('.modal-footer');
-    if (footer) footer.appendChild(interactiveBtn);
+    if (footer) { footer.appendChild(interactiveBtn); footer.appendChild(claudeBtn); }
 
     setTimeout(() => ta.focus(), 50);
   }

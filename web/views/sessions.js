@@ -182,6 +182,14 @@ window.SessionsView = async function (root, { rest, app }) {
     open.addEventListener('click', (e) => { e.stopPropagation(); openSession(s.id); });
     ctrls.appendChild(open);
 
+    // Interchange → Interactive Claude: open the Claude tab pointed at this
+    // session's folder (its recent conversations are one tap away in the picker).
+    const toClaude = el('button', { class: 'btn sm ghost' });
+    toClaude.innerHTML = window.icon('sparkles', { size: 14 }) + ' Claude';
+    toClaude.title = 'Open this folder in Interactive Claude';
+    toClaude.addEventListener('click', (e) => { e.stopPropagation(); location.hash = '#claude/' + encodeURIComponent(s.folder || ''); });
+    ctrls.appendChild(toClaude);
+
     if (s.status === 'running') {
       const k = el('button', { class: 'btn sm ghost danger' });
       k.innerHTML = window.icon('stop', { size: 14 }) + ' Kill';
