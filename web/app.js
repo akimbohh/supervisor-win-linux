@@ -41,6 +41,67 @@
     e.preventDefault();
   }, { passive: false });
 
+  // ── iOS software keyboard ──
+  // In a standalone PWA the layout viewport does NOT shrink when the keyboard
+  // opens, so a 100dvh layout leaves the bottom of the app (composer, quick
+  // keys, the terminal's prompt line) hidden behind it. Track the visual
+  // viewport and hand the real visible height to CSS as --vvh; .app sizes
+  // itself with it. Only engaged when the height loss looks like a keyboard
+  // (>150px), so normal browser-chrome collapse keeps native dvh behavior —
+  // and on Android, where the layout viewport already resizes, this never
+  // triggers at all.
+  (function () {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let raf = 0;
+    let wasKb = false;
+    let panTries = 0;
+    function editing() {
+      const a = document.activeElement;
+      if (!a) return false;
+      return a.tagName === 'TEXTAREA' || a.tagName === 'INPUT' || a.isContentEditable;
+    }
+    function apply() {
+      raf = 0;
+      const lost = window.innerHeight - vv.height;
+      const root = document.documentElement;
+      // Dictation ending or an app switch can swallow the closing resize
+      // event, leaving a stale keyboard height (blank strip under the tab
+      // bar). The keyboard can only be up while something editable has
+      // focus — no focus, no shrink, whatever the viewport numbers claim.
+      const kb = lost > 150 && editing();
+      if (kb !== wasKb) { wasKb = kb; panTries = 0; }
+      if (kb) root.style.setProperty('--vvh', Math.round(vv.height) + 'px');
+      else root.style.removeProperty('--vvh');
+      // While typing, the nav tab bar is dead weight — hide it (CSS .kb-open)
+      // so the keyboard row / composer sits directly above the keyboard.
+      root.classList.toggle('kb-open', kb);
+      // WebKit decides to pan the page up to "reveal" the focused input
+      // BEFORE our resize lands, which shoves the whole app off the top and
+      // leaves a black void under it. Undo the pan (a few tries per keyboard
+      // session — each attempt re-fires vv scroll), and if an offset still
+      // sticks, translate the app down into the visible region instead.
+      const panned = window.scrollY || window.scrollX || vv.offsetTop > 0.5;
+      if (panned && panTries < 5) { panTries++; try { window.scrollTo(0, 0); } catch (e) {} }
+      const app = document.querySelector('.app');
+      if (app) {
+        const off = kb ? Math.max(0, Math.round(vv.offsetTop)) : 0;
+        app.style.transform = off ? 'translateY(' + off + 'px)' : '';
+      }
+    }
+    function schedule() { if (!raf) raf = requestAnimationFrame(apply); }
+    vv.addEventListener('resize', schedule);
+    vv.addEventListener('scroll', schedule);
+    // The pan often lands right after focus, before any vv event we track.
+    window.addEventListener('focusin', () => setTimeout(schedule, 50));
+    window.addEventListener('focusout', () => setTimeout(schedule, 50));
+    // Re-verify after backgrounding — iOS drops viewport events while hidden.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(); });
+    window.addEventListener('pageshow', schedule);
+    window.addEventListener('orientationchange', schedule);
+    apply();
+  })();
+
   // ── Service worker ──
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then((reg) => {

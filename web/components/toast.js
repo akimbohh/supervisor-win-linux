@@ -12,6 +12,16 @@
     warn: 'warning',
   };
 
+  // Error messages can carry whole source dumps (stack-laden vendor errors) —
+  // a toast must never fill the screen. Full text still goes to the console.
+  const MAX = 300;
+  function short(s) {
+    s = String(s == null ? '' : s);
+    if (s.length <= MAX) return s;
+    try { console.warn('[toast] full message:', s); } catch (e) {}
+    return s.slice(0, MAX - 1) + '…';
+  }
+
   function make(opts) {
     const r = ensureRoot();
     const kind = opts.kind || 'info';
@@ -24,15 +34,15 @@
     body.style.minWidth = '0';
     if (opts.title) {
       const h = document.createElement('div');
-      h.style.fontWeight = '600'; h.textContent = opts.title;
+      h.style.fontWeight = '600'; h.textContent = short(opts.title);
       body.appendChild(h);
     }
     if (opts.body) {
       const b = document.createElement('div');
-      b.style.color = 'var(--text-2)'; b.style.fontSize = '12px'; b.textContent = opts.body;
+      b.style.color = 'var(--text-2)'; b.style.fontSize = '12px'; b.textContent = short(opts.body);
       body.appendChild(b);
     }
-    if (!opts.title && !opts.body && opts.text) body.textContent = opts.text;
+    if (!opts.title && !opts.body && opts.text) body.textContent = short(opts.text);
 
     const close = document.createElement('div');
     close.className = 'close';

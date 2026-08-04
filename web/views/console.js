@@ -5,12 +5,21 @@ window.ConsoleView = async function (root, { rest, app }) {
   const terms = new Map();          // id -> { term, fit, host, history, historyIdx }
   let unsub = null;
 
-  // Header action: + new shell
+  // Header action: + new shell. Re-bound on every resume — navigate() resets
+  // the header slots whenever the tab changes.
   const a1 = document.getElementById('header-action-1');
-  a1.hidden = false;
-  a1.title = 'New shell';
-  a1.innerHTML = window.icon('plus');
-  a1.onclick = () => createShell();
+  function bindHeader() {
+    a1.hidden = false;
+    a1.title = 'New shell';
+    a1.innerHTML = window.icon('plus');
+    a1.onclick = () => createShell();
+  }
+  bindHeader();
+
+  // The console owns its whole pane: no page padding, no outer scrolling to
+  // fight the terminal's own touch handling (see .app-main--console).
+  const mainEl = document.getElementById('main');
+  mainEl.classList.add('app-main--console');
 
   // Layout
   root.innerHTML = '';
@@ -19,6 +28,17 @@ window.ConsoleView = async function (root, { rest, app }) {
   wrap.appendChild(tabsBar);
   const termHost = el('div', { class: 'term-host', style: { flex: '1 1 auto' } });
   wrap.appendChild(termHost);
+  // "Jump to latest" — appears when the active terminal is scrolled up.
+  const jump = el('button', { class: 'term-jump hidden' });
+  jump.innerHTML = window.icon('arrow-down', { size: 14 }) + '<span>Latest</span>';
+  jump.addEventListener('click', () => { const t = terms.get(activeId); if (t) t.term.scrollToBottom(); });
+  termHost.appendChild(jump);
+  function updateJump() {
+    const t = terms.get(activeId);
+    let up = false;
+    if (t) { const b = t.term.buffer.active; up = b.viewportY < b.baseY; }
+    jump.classList.toggle('hidden', !up);
+  }
   const kbdRow = el('div', { class: 'kbd-row' });
   wrap.appendChild(kbdRow);
   root.appendChild(wrap);
@@ -346,7 +366,7 @@ window.ConsoleView = async function (root, { rest, app }) {
     const t = terms.get(activeId);
     if (!t) return;
     const sel = t.term.getSelection();
-    const folder = t.cwd || shells.find(s => s.id === activeId).cwd;
+    const folder = t.cwd || ((shells.find(s => s.id === activeId) || {}).cwd || '');
     const text = sel || '';
     location.hash = '#sessions/new/' + encodeURIComponent(folder);
     setTimeout(() => {
@@ -362,7 +382,81 @@ window.ConsoleView = async function (root, { rest, app }) {
     for (const [tid, t] of terms) t.host.style.display = tid === id ? 'block' : 'none';
     if (!terms.has(id)) attach(id);
     renderTabs(); renderKbdRow();
+    updateJump();
     setTimeout(() => fitTerm(id), 60);
+  }
+
+  // ── Touch scrolling ──
+  // xterm.js has no touch support (xtermjs/xterm.js#1101), and letting iOS
+  // momentum-scroll the .xterm-viewport re-renders mid-fling and fights the
+  // page pan — the classic glitchy-terminal feel. Mobile clients that feel
+  // right (ttyd, Sshwifty, hterm) all own touch themselves: touch-action:none
+  // on the terminal (styles.css), finger deltas → term.scrollLines(), a small
+  // rAF momentum loop, and arrow keys instead of scrolling when the app is on
+  // the alternate screen (vim / less / the Claude TUI) — mirroring what xterm
+  // itself does for wheel events there.
+  function attachTouchScroll(term) {
+    const elx = term.element;
+    if (!elx) return;
+    let lastY = 0, lastT = 0, vel = 0, acc = 0, tracking = false, moved = false;
+    let raf = 0;
+    const rowH = () => {
+      const s = elx.querySelector('.xterm-screen');
+      return (s && s.clientHeight && term.rows) ? Math.max(6, s.clientHeight / term.rows) : 18;
+    };
+    const altScreen = () => term.buffer.active.type === 'alternate';
+    function applyPx(dy) {
+      // dy > 0 = finger moved down = reveal earlier content.
+      acc += dy;
+      const h = rowH();
+      const lines = Math.trunc(acc / h);
+      if (!lines) return;
+      acc -= lines * h;
+      if (altScreen()) {
+        const key = lines > 0 ? '\x1b[A' : '\x1b[B';
+        sendInput(key.repeat(Math.min(Math.abs(lines), 20)));
+      } else {
+        term.scrollLines(-lines);
+      }
+    }
+    function stopFling() { if (raf) { cancelAnimationFrame(raf); raf = 0; } vel = 0; }
+    elx.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      stopFling();
+      tracking = true; moved = false;
+      lastY = e.touches[0].clientY; lastT = e.timeStamp; acc = 0;
+    }, { passive: true });
+    elx.addEventListener('touchmove', (e) => {
+      if (!tracking || e.touches.length !== 1) return;
+      const y = e.touches[0].clientY;
+      const dy = y - lastY;
+      const dt = Math.max(1, e.timeStamp - lastT);
+      lastY = y; lastT = e.timeStamp;
+      if (!moved && Math.abs(dy) < 3) return; // tap slop — keep taps focusing
+      moved = true;
+      e.preventDefault(); // we own this pan — nothing else may scroll
+      vel = 0.8 * vel + 0.2 * (dy / dt);
+      applyPx(dy);
+    }, { passive: false });
+    elx.addEventListener('touchend', () => {
+      if (!tracking) return;
+      tracking = false;
+      if (!moved || altScreen()) return;
+      // Fling: decay velocity exponentially, keep feeding fractional pixels.
+      let prev = performance.now();
+      const step = (now) => {
+        raf = 0;
+        const dt = Math.min(50, now - prev);
+        prev = now;
+        applyPx(vel * dt);
+        vel *= Math.pow(0.94, dt / 16.7);
+        const b = term.buffer.active;
+        const atEdge = b.viewportY <= 0 || b.viewportY >= b.baseY;
+        if (Math.abs(vel) > 0.03 && !atEdge) raf = requestAnimationFrame(step);
+      };
+      if (Math.abs(vel) > 0.08) raf = requestAnimationFrame(step);
+    }, { passive: true });
+    elx.addEventListener('touchcancel', () => { tracking = false; stopFling(); }, { passive: true });
   }
 
   async function attach(id) {
@@ -398,6 +492,12 @@ window.ConsoleView = async function (root, { rest, app }) {
     // Send keystrokes
     term.onData((data) => sendInput(data));
 
+    attachTouchScroll(term);
+    term.onScroll(() => { if (id === activeId) updateJump(); });
+    if (typeof term.onWriteParsed === 'function') term.onWriteParsed(() => { if (id === activeId) updateJump(); });
+    // Keyboard opening (helper textarea focused) → snap to the prompt line.
+    if (term.textarea) term.textarea.addEventListener('focus', () => term.scrollToBottom());
+
     // Local command-history (Ctrl+R style)
     const ctx = { term, fit, host, cwd: info.cwd, history: [], historyIdx: -1 };
     terms.set(id, ctx);
@@ -406,6 +506,7 @@ window.ConsoleView = async function (root, { rest, app }) {
 
   function fitTerm(id) {
     const t = terms.get(id); if (!t) return;
+    if (!t.host.clientHeight) return; // hidden or detached — fitted on resume/activate
     try {
       if (t.fit) {
         t.fit.fit();
@@ -425,6 +526,7 @@ window.ConsoleView = async function (root, { rest, app }) {
   async function reload(silent) {
     try {
       shells = await window.api('/api/console');
+      for (const s of shells) app.subscribe('shell:' + s.id); // idempotent
       if (!silent) renderTabs();
       // Auto-create one if empty
       if (!shells.length) {
@@ -461,8 +563,15 @@ window.ConsoleView = async function (root, { rest, app }) {
 
   // ── WS ──
   app.subscribe('shells');
+  let needResync = false;
   unsub = app.onMessage((msg) => {
     if (!msg) return;
+    if (msg.topic === '_conn') {
+      const st = msg.payload && msg.payload.state;
+      if (st === 'offline') needResync = true;
+      else if (needResync) { needResync = false; resyncAll(); }
+      return;
+    }
     if (msg.topic === 'shells') return reload(true);
     if (msg.topic === 'settings') { renderKbdRow(); return; }
     if (msg.topic && msg.topic.startsWith('shell:')) {
@@ -474,30 +583,63 @@ window.ConsoleView = async function (root, { rest, app }) {
     }
   });
 
-  // Subscribe to active shell's output
-  function ensureShellSub(id) {
-    app.subscribe('shell:' + id);
+  // The socket dropped (iOS backgrounding kills it) — output chunks are gone
+  // and any TUI screen is likely torn. Re-pull each shell's server-side
+  // scrollback and repaint from scratch instead of trusting the broken stream.
+  async function resyncAll() {
+    await reload(true);
+    for (const [id, t] of terms) {
+      try {
+        const info = await window.api('/api/console/' + id);
+        t.term.reset();
+        if (info.scrollback) t.term.write(info.scrollback);
+        t.term.scrollToBottom();
+      } catch (e) { /* shell died while we were away; the tab list reflects it */ }
+    }
+    updateJump();
   }
-  // Listen for activations to ensure subscription
-  const origActivate = activate;
-  // (Already subscribed in attach via app.subscribe; do it explicitly when shell appears.)
-
-  // Re-subscribe on reload
-  const origReload = reload;
-  reload = async function (silent) {
-    await origReload(silent);
-    for (const s of shells) ensureShellSub(s.id);
-  };
 
   // Resize observer for terminal fit
   const ro = new ResizeObserver(window.debounce(fitAll, 80));
   ro.observe(termHost);
   window.addEventListener('orientationchange', fitAll);
 
+  // Software keyboard opened → the pane shrank (app.js --vvh); keep the
+  // prompt line in view. The ResizeObserver above handles the refit.
+  function onVVResize() {
+    const t = terms.get(activeId);
+    if (t) requestAnimationFrame(() => t.term.scrollToBottom());
+  }
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', onVVResize);
+
   await reload();
 
   return {
+    // Terminals survive tab switches: the DOM detaches but xterm instances,
+    // WS subscriptions and scrollback all stay live (like the Claude tab).
+    persist: true,
+    suspend() {
+      mainEl.classList.remove('app-main--console');
+      // navigate() resets the header slot; nothing else to pause — detached
+      // terminals keep consuming WS output so they stay current while hidden.
+    },
+    resume() {
+      mainEl.classList.add('app-main--console');
+      bindHeader();
+      reload(true); // catch shell list changes + the maintenance hand-off hint
+      requestAnimationFrame(() => {
+        fitAll();
+        const t = terms.get(activeId);
+        if (t) {
+          try { t.term.refresh(0, t.term.rows - 1); } catch (e) {}
+          t.term.scrollToBottom();
+        }
+        updateJump();
+      });
+    },
     destroy() {
+      mainEl.classList.remove('app-main--console');
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', onVVResize);
       ro.disconnect();
       a1.hidden = true; a1.onclick = null;
       app.unsubscribe('shells');

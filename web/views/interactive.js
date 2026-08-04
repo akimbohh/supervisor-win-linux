@@ -166,17 +166,31 @@ window.InteractiveView = async function (root, { rest, app }) {
     if (pending) { ta.value = pending; localStorage.removeItem('claude.pendingMessage'); setTimeout(autoGrow, 0); }
   } catch (e) {}
 
+  // Composer buttons keep focus (and the mobile keyboard) in the textarea by
+  // preventing default on pointerdown — but on iOS WebKit that also swallows
+  // the synthetic click, so the button would highlight and then do nothing.
+  // Fire on pointerup — the same gesture that shows the press highlight —
+  // and keep click only as a deduped fallback (keyboard activation etc.).
+  function bindTap(btn, fn) {
+    let fired = false;
+    btn.addEventListener('pointerdown', (e) => e.preventDefault());
+    btn.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      fired = true;
+      setTimeout(() => { fired = false; }, 400);
+      fn();
+    });
+    btn.addEventListener('click', () => { if (!fired) fn(); });
+  }
+
   const sendBtn = el('button', { class: 'chat-send', title: 'Send' });
   sendBtn.innerHTML = window.icon('send', { size: 18 });
-  // Keep focus (and the mobile keyboard) in the textarea when tapping send.
-  sendBtn.addEventListener('pointerdown', (e) => e.preventDefault());
-  sendBtn.addEventListener('click', () => { if (streaming) stop(); else send(); });
+  bindTap(sendBtn, () => { if (streaming) stop(); else send(); });
 
   // "+" menu: photo / file upload (into the session cwd) + repo references.
   const plusBtn = el('button', { class: 'chat-plus', title: 'Add photos, files or folders' });
   plusBtn.innerHTML = window.icon('plus', { size: 18 });
-  plusBtn.addEventListener('pointerdown', (e) => e.preventDefault());
-  plusBtn.addEventListener('click', showPlusSheet);
+  bindTap(plusBtn, showPlusSheet);
 
   const imgInput = el('input', { type: 'file', accept: 'image/*', multiple: '' });
   const fileInput = el('input', { type: 'file', multiple: '' });
