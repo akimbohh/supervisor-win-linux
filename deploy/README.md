@@ -3,6 +3,28 @@
 A fresh `git clone` on Ubuntu 24.04 reaches a working, boot-persistent install
 via the steps below.
 
+## One-line install (Ubuntu/Debian, run as root)
+
+Paste this into an SSH session (Termius, etc.). It prompts for a password, then
+installs prerequisites + Node (if missing), clones to `/opt/supervisor`,
+installs deps, and creates + starts a boot-persistent `systemd` service bound to
+all interfaces (reach it over Tailscale):
+
+```bash
+read -rsp 'Set a Supervisor password: ' PASS; echo; DIR=/opt/supervisor PORT=7778; apt-get update -qq && apt-get install -y -qq git build-essential python3 curl && { command -v node >/dev/null || { curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs; }; } && { [ -d "$DIR/.git" ] || git clone https://github.com/akimbohh/supervisor-win-linux.git "$DIR"; } && cd "$DIR" && npm install --no-audit --no-fund && printf '[Unit]\nDescription=Supervisor\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=%s\nEnvironment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nEnvironment=SUPERVISOR_PORT=%s\nEnvironment=SUPERVISOR_BIND=0.0.0.0\nEnvironment=SUPERVISOR_PASSWORD=%s\nExecStart=%s server/server.js\nRestart=always\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n' "$DIR" "$PORT" "$PASS" "$(command -v node)" > /etc/systemd/system/supervisor.service && systemctl daemon-reload && systemctl enable --now supervisor && sleep 2 && curl -fsS localhost:$PORT/api/ping && echo " ✓ Supervisor is up on port $PORT"
+```
+
+Not root? Run `sudo -i` first, or prefix the line with `sudo bash -c '…'`.
+
+This runs the service **as root** so power actions (shutdown/restart) and the
+whole disk work without extra polkit/sudoers rules — appropriate for a personal
+single-user panel reached over Tailscale. For a hardened non-root install, use
+`install-linux.sh --service` (below) and add the polkit rule in
+[Power actions](#power-actions-shutdown--restart--sleep).
+
+Update later:  `cd /opt/supervisor && git pull && npm install --no-audit --no-fund && systemctl restart supervisor`
+Uninstall:     `systemctl disable --now supervisor && rm /etc/systemd/system/supervisor.service && systemctl daemon-reload && rm -rf /opt/supervisor`
+
 ## Quick start
 
 ```bash
