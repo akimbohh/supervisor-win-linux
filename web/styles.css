@@ -141,7 +141,7 @@
 
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; height: 100%; overscroll-behavior: none; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   font-family: var(--font);
@@ -153,6 +153,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+  /* iOS home-screen PWA: a fixed body cannot be panned, so drags on chrome
+     (header, tab bar, composer) can't rubber-band the whole app past its
+     edges. Inner panes (.chat-scroll, .app-main, xterm, …) own all scrolling;
+     app.js additionally blocks touch pans that no inner scroller can take. */
+  position: fixed;
+  inset: 0;
   /* Kills the 300 ms double-tap-to-zoom delay; with user-scalable=no on the
      viewport this also fully disables pinch zoom. Inputs inside CodeMirror
      and xterm get their own touch-action so text selection still works. */
@@ -160,6 +166,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .cm-host, .term-host, .CodeMirror, .xterm { touch-action: auto; }
+/* Every scrollable pane keeps its scroll to itself — reaching the top/bottom
+   must never chain into the document (iOS standalone rubber-band). */
+.app-main, .modal-body, .chat-scroll, .xterm-viewport, .CodeMirror-scroll,
+.code-preview, .md-pre, .h-tabs, .term-bar, .kbd-row { overscroll-behavior: contain; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { background: none; border: 0; cursor: pointer; padding: 0; }
 a { color: var(--accent); text-decoration: none; }
@@ -878,3 +888,222 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index
 .machine-chip .mplat { font-size:10px; color:var(--text-3); line-height:1.2; }
 /* the app content sits above the texture */
 .app { position:relative; z-index:1; }
+
+/* ── Claude chat (Interactive Claude tab) ──────────────────────────────────
+ * Deliberately chat-app-like (ChatGPT/iMessage), mobile-first. The view fills
+ * the main area; only .chat-scroll scrolls; the composer stays pinned. */
+.chat { display:flex; flex-direction:column; height:100%; min-height:0; }
+
+/* Context strip: folder + mode chips, history / new-chat on the right */
+.chat-top { display:flex; align-items:center; gap:6px; padding-bottom:8px; min-width:0; }
+.chat-chip {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:0 12px; min-height:36px; max-width:44%;
+  border:1px solid var(--border); border-radius:var(--radius-pill);
+  background:var(--surface-1); color:var(--text-2);
+  font-size:12px; font-weight:500; cursor:pointer; min-width:0;
+  transition:background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.chat-chip:hover { background:var(--surface-2); border-color:var(--border-strong); }
+.chat-chip svg { width:14px; height:14px; flex-shrink:0; color:var(--text-3); }
+.chat-chip .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Transcript */
+.chat-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.chat-inner { display:flex; flex-direction:column; gap:14px; max-width:720px; margin:0 auto; padding:6px 2px 16px; }
+
+.chat-msg.user {
+  align-self:flex-end; max-width:85%;
+  background:var(--accent-soft);
+  border-radius:16px 16px 4px 16px;
+  padding:10px 14px;
+  font-size:14px; line-height:1.5;
+  white-space:pre-wrap; word-break:break-word;
+}
+@media (min-width:768px) { .chat-msg.user { max-width:70%; } }
+
+/* Assistant markdown — full-width, no bubble */
+.chat-md { font-size:14px; line-height:1.55; word-break:break-word; min-width:0; }
+.chat-md > :first-child { margin-top:0; }
+.chat-md > :last-child { margin-bottom:0; }
+.chat-md p, .chat-md ul, .chat-md blockquote { margin:0 0 10px; }
+.chat-md ul { padding-left:22px; }
+.chat-md li { margin:2px 0; }
+.chat-md h1, .chat-md h2 { font-size:16px; margin:14px 0 8px; }
+.chat-md h3, .chat-md h4, .chat-md h5, .chat-md h6 { font-size:14px; margin:12px 0 6px; }
+.chat-md .md-pre { max-width:100%; overflow-x:auto; font-size:12px; }
+.chat-md .md-code { font-size:12.5px; word-break:break-all; }
+.chat-md a { word-break:break-all; }
+
+/* Tool activity: grouped, one human line per tool, tap to expand raw detail */
+.chat-tools { border:1px solid var(--border-soft); border-radius:var(--radius-lg); background:var(--surface-1); overflow:hidden; }
+.chat-tool { border-bottom:1px solid var(--border-soft); }
+.chat-tool:last-child { border-bottom:0; }
+.chat-tool summary {
+  display:flex; align-items:center; gap:8px;
+  padding:0 12px; min-height:40px; cursor:pointer;
+  font-family:var(--mono); font-size:12px; color:var(--text-2);
+  list-style:none; user-select:none;
+}
+.chat-tool summary::-webkit-details-marker { display:none; }
+.chat-tool summary > svg:first-child { width:14px; height:14px; flex-shrink:0; color:var(--text-3); }
+.chat-tool summary .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.chat-tool summary .chev { margin-left:auto; flex-shrink:0; color:var(--text-4); transition:transform var(--t) var(--ease); }
+.chat-tool summary .chev svg { width:14px; height:14px; display:block; }
+.chat-tool[open] summary .chev { transform:rotate(90deg); }
+.chat-tool pre {
+  margin:0; padding:8px 12px;
+  font-family:var(--mono); font-size:11px; line-height:1.5;
+  color:var(--text-2); background:var(--surface-2);
+  white-space:pre-wrap; word-break:break-word;
+  max-height:240px; overflow:auto;
+}
+.chat-tool .part { padding:4px 12px 2px; font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-4); background:var(--surface-2); }
+
+/* Status rows */
+.chat-thinking { display:flex; align-items:center; gap:8px; color:var(--text-3); font-size:13px; padding:2px 0; }
+.chat-thinking .livebars { color:var(--accent); }
+.chat-error { color:var(--danger); background:var(--danger-soft); border-radius:var(--radius); padding:8px 12px; font-size:13px; word-break:break-word; }
+.chat-meta { color:var(--text-4); font-size:11px; text-align:center; }
+
+/* Jump-to-latest chip (sticky inside the scroller) */
+.chat-jump {
+  position:sticky; bottom:8px; align-self:center; margin:0 auto;
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 12px; border-radius:var(--radius-pill);
+  background:var(--surface-3); border:1px solid var(--border-strong);
+  color:var(--text); font-size:12px; font-weight:500;
+  box-shadow:var(--sh-4); cursor:pointer; z-index:2;
+}
+.chat-jump svg { width:14px; height:14px; }
+
+/* Composer — pill input + round send/stop button */
+.chat-composer { display:flex; padding-top:8px; }
+/* The pill owns everything: + button, textarea, send button. The buttons are
+   flex-end-anchored inside it, so they track the pill exactly — single line
+   or grown to max-height — with no cross-element height math to drift. */
+.chat-inputwrap {
+  flex:1 1 auto; min-width:0;
+  display:flex; align-items:flex-end; gap:2px;
+  background:var(--surface-1);
+  border:1px solid var(--border); border-radius:22px;
+  padding:4px;
+  transition:border-color var(--t) var(--ease);
+}
+.chat-inputwrap:focus-within { border-color:var(--accent); }
+.chat-input {
+  flex:1 1 auto; min-width:0;
+  border:0; background:transparent; outline:none; resize:none;
+  font-family:var(--font); font-size:15px; line-height:1.4;
+  padding:7px 6px; max-height:132px;
+  color:var(--text);
+}
+.chat-input::placeholder { color:var(--text-3); }
+.chat-send {
+  width:36px; height:36px; flex-shrink:0;
+  border-radius:50%;
+  background:var(--accent); color:var(--accent-on);
+  display:grid; place-items:center;
+  transition:background var(--t) var(--ease), transform var(--t-fast) var(--ease);
+}
+.chat-send:active { transform:scale(0.94); }
+.chat-send:disabled { opacity:0.45; }
+.chat-send.stop { background:var(--danger); color:#fff; }
+.chat-send svg { width:18px; height:18px; }
+
+/* Welcome / empty state */
+.chat-welcome { display:flex; flex-direction:column; align-items:center; gap:10px; text-align:center; padding:40px 16px 24px; color:var(--text-2); }
+.chat-welcome > svg { width:32px; height:32px; color:var(--accent); }
+.chat-welcome h3 { margin:0; font-size:17px; font-weight:600; color:var(--text); letter-spacing:-0.01em; }
+.chat-welcome p { margin:0; font-size:13px; max-width:340px; }
+.chat-suggest { display:flex; flex-direction:column; gap:8px; width:100%; max-width:380px; margin-top:10px; }
+.chat-suggest button {
+  text-align:left; padding:12px 14px; min-height:44px;
+  border:1px solid var(--border); border-radius:var(--radius-lg);
+  background:var(--surface-1); color:var(--text); font-size:13px;
+  transition:background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.chat-suggest button:hover { background:var(--surface-2); border-color:var(--border-strong); }
+
+/* Sheet rows used by the folder / mode / history pickers */
+.chat-opt { display:flex; align-items:center; gap:12px; padding:12px 4px; min-height:52px; border-bottom:1px solid var(--border-soft); cursor:pointer; }
+.chat-opt:last-child { border-bottom:0; }
+.chat-opt .ic { width:36px; height:36px; flex-shrink:0; border-radius:10px; background:var(--surface-2); display:grid; place-items:center; color:var(--text-2); }
+.chat-opt .ic svg { width:18px; height:18px; }
+.chat-opt.on .ic { background:var(--accent-soft); color:var(--accent); }
+.chat-opt .tx { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.chat-opt .tx .t { font-size:14px; font-weight:500; color:var(--text); }
+.chat-opt .tx .d { font-size:12px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-opt .mark { flex-shrink:0; color:var(--accent); }
+.chat-opt .mark svg { width:18px; height:18px; }
+
+/* ── Persistent views ── */
+/* Layout-neutral wrapper every view mounts into; persistent views (Claude
+   chat) are detached and re-appended on tab switches instead of destroyed. */
+.view-host { display: contents; }
+
+/* Reconnecting banner: shown in the chat while the WS is down / replaying,
+   instead of clearing or freezing the transcript silently. */
+.chat-reconnect {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  margin:0 auto 6px; padding:4px 12px; width:fit-content;
+  border:1px solid var(--border); border-radius:var(--radius-pill);
+  background:var(--surface-1); color:var(--text-3); font-size:12px;
+}
+.chat-reconnect .livebars { color:var(--warn, var(--accent)); }
+.chat-reconnect.hidden { display:none; }
+
+/* ── Chat: "+" menu, attachment chips, session switcher rows ── */
+.chat-plus {
+  /* Sits inside the input pill, mirroring .chat-send's size. */
+  flex-shrink:0; width:36px; height:36px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:transparent; color:var(--text-3);
+  transition:background var(--t) var(--ease), color var(--t) var(--ease);
+}
+.chat-plus:hover { background:var(--surface-2); color:var(--text); }
+
+.chat-attach { display:flex; flex-wrap:wrap; gap:6px; padding:4px 2px 6px; }
+.chat-attach.hidden { display:none; }
+.chat-attach-chip {
+  display:inline-flex; align-items:center; gap:5px; max-width:220px;
+  padding:3px 6px 3px 10px; border:1px solid var(--border);
+  border-radius:var(--radius-pill); background:var(--surface-1);
+  font-size:12px; color:var(--text-2);
+}
+.chat-attach-chip .ic { display:inline-flex; color:var(--text-3); }
+.chat-attach-chip .lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-attach-chip.repo { border-color:var(--accent); color:var(--text); }
+.chat-attach-chip.repo .ic { color:var(--accent); }
+.chat-attach-chip.prog { opacity:.75; }
+.chat-attach-chip .x {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border-radius:50%; color:var(--text-3);
+}
+.chat-attach-chip .x:hover { background:var(--surface-2); color:var(--text); }
+
+/* Session rows in the sessions sheet: status dot + inline actions */
+.chat-opt.session { align-items:center; }
+.chat-opt.session .acts { display:flex; gap:2px; flex-shrink:0; }
+.chat-opt .sdot {
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  background:var(--text-4); margin-right:7px; vertical-align:middle;
+}
+.chat-opt .sdot.run { background:var(--success, #4ade80); box-shadow:0 0 6px var(--success, #4ade80); }
+
+/* ── Directory picker sheet ── */
+.dirpick { display:flex; flex-direction:column; min-height:40vh; }
+.dirpick-path {
+  font-size:12px; color:var(--text-3); padding:2px 4px 8px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
+}
+.dirpick-list { display:flex; flex-direction:column; }
+.dirpick-row {
+  display:flex; align-items:center; gap:10px; padding:10px 8px;
+  border-radius:var(--radius); cursor:pointer; min-width:0;
+}
+.dirpick-row:hover { background:var(--surface-1); }
+.dirpick-row .ic { display:inline-flex; color:var(--text-3); flex-shrink:0; }
+.dirpick-row .lbl { font-size:14px; }
+.dirpick-row .hint { margin-left:auto; font-size:11px; color:var(--text-4); max-width:45%; }
+.dirpick-row.muted .lbl { color:var(--text-3); }

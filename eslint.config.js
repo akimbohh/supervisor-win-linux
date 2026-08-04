@@ -31,6 +31,6 @@ module.exports = [
     },
   },
   {
-    ignores: ['web/**', 'redesign/**', 'node_modules/**', 'data/**', 'server/lib/store.js.*'],
+    ignores: ['web/**', 'web.backup-*/**', 'redesign/**', 'node_modules/**', 'data/**', 'server/lib/store.js.*'],
   },
 ];
