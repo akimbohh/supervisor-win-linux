@@ -32,26 +32,87 @@ the same `session_id` in another mode.
   stdin. `--dangerously-skip-permissions` is added for the `default` mode (a
   piped run can't answer an interactive permission prompt), matching the
   maintenance flow; `plan`/`acceptEdits` don't need it.
-- Each stdout line is one NDJSON `SDKMessage`, republished on the hub topic
-  `claude:<requestId>` as `{ type: 'claude_json'|'session'|'stderr'|'done'|
-  'error'|'aborted', data|sessionId|error }`. The resumable `session_id` is
-  captured from the stream and emitted as a `session` event.
-- REST (all behind `requireAuth`): `POST /api/claude/chat` (start),
-  `POST /api/claude/abort` (by `requestId`), `GET /api/claude/runs`,
+- **Chats survive the client.** A *chat* is the server-side unit the UI
+  attaches to: stable `chatId`, cwd, the Claude `session_id` it resumes, and a
+  seq-numbered ring of every published event (`MAX_CHAT_EVENTS`, in-memory,
+  capped by `SUPERVISOR_MAX_CLAUDE_CHATS`). Runs are plain server-side child
+  processes — a tab switch, WS drop, iOS backgrounding, or page reload never
+  touches them. A re-attaching client sends its last seen `seq` and replays the
+  gap via `GET /api/claude/chats/:chatId?since=<seq>`.
+- Each stdout line is one NDJSON `SDKMessage`, appended to the chat ring and
+  republished on the hub topic `claude:<chatId>` as `{ seq, type:
+  'claude_json'|'session'|'user'|'done'|'error'|'aborted', … }` (plus unbuffered
+  `stderr`, no seq). The user turn is buffered too, so a replay reconstructs
+  whole turns. The resumable `session_id` is captured from the stream and
+  emitted as a `session` event.
+- REST (all behind `requireAuth`): `POST /api/claude/chat` (start; continues the
+  chat when `chatId` names a live one, else creates one and returns its id),
+  `POST /api/claude/abort` (by `requestId` or `chatId`), `GET /api/claude/chats`
+  (list live chats), `POST /api/claude/chats` (create an idle chat up-front —
+  the "New session in <folder>" flow), `GET /api/claude/chats/:chatId?since=<seq>`
+  (state + replay; 404 after a server restart → client falls back to the
+  on-disk transcript), `POST /api/claude/chats/:chatId/rename`,
+  `DELETE /api/claude/chats/:chatId` (kill: aborts any in-flight run, drops the
+  registry entry; the jsonl transcript stays resumable),
+  `POST /api/claude/chats/:chatId/dirs` (replace the chat's `--add-dir` list —
+  each entry `ensureSafe`d and must exist; applied from the next run),
+  `GET /api/claude/runs`,
   `GET /api/claude/{projects,conversations,conversation,status}`. `cwd` is run
   through `ensureSafe`. Concurrency capped by `SUPERVISOR_MAX_CLAUDE_RUNS`
   (default 8). Gated on a new `claude` capability (is the CLI on PATH?), exposed
-  via `/api/system/capabilities`.
+  via `/api/system/capabilities`. Chat lifecycle changes are announced on the
+  hub topic `claude-chats`.
 - Conversation history is read from `~/.claude/projects` (`ConversationSummary`
   / full history), keyed by the `encodeCwd` layout Claude uses on disk.
 
 ## Frontend (`web/views/interactive.js`)
 
-Chat list + composer (Send / Stop), a cwd field, a `default|plan|acceptEdits`
-segmented control, and a conversation picker to resume by `session_id`. Streams
-over the WS topic. Renders assistant text, collapsible `tool_use`/`tool_result`
-blocks, and the final `result`. Falls back to a disabled state with a reason
-when Claude isn't installed.
+A mobile-first, chat-app-style UI (`.chat-*` in `web/styles.css`), deliberately
+sleeker than the rest of the app and aimed at non-power users:
+
+- **Context strip**: a folder chip (basename only; tap → bottom sheet with
+  Home / `selfRepoPath` ("This app") / recent folders / raw-path entry, recents
+  persisted in `localStorage['claude.recentCwds']`) and a mode chip with
+  plain-language permission modes ("Do it for me" = `default`, "Plan only" =
+  `plan`, "Auto-accept edits" = `acceptEdits`). History and new-chat buttons on
+  the right. "Open in terminal" lives in the mode sheet under Power tools.
+- **Transcript**: user messages as accent bubbles; assistant replies rendered
+  as markdown via the CSP-safe `window.renderMarkdown` (shared from
+  `views/files.js`); `tool_use` shown as human one-liners ("Edited `auth.js`",
+  "Ran `npm test`") grouped in a card, expandable to raw input + result
+  (results attached by `tool_use_id`); the final `result` deduped against the
+  last assistant message; an animated "Claude is working…" indicator while
+  streaming; inline error rows; a jump-to-latest chip when scrolled up.
+- **Composer**: pinned pill input with auto-growing textarea and a round
+  send button that morphs into Stop while streaming (Cmd/Ctrl+Enter still
+  sends on desktop).
+- **Resume with history**: picking a past conversation (bottom sheet) loads
+  the full transcript via `GET /api/claude/conversation` and renders it before
+  continuing. Falls back to a disabled state with a reason when Claude isn't
+  installed.
+- **Persistence**: the view returns `persist: true` — `app.js` detaches its DOM
+  on tab switch and re-appends it later instead of destroying it, so transcript,
+  closures, and the WS handler survive navigation (events keep rendering into
+  the off-screen tree). The active chat (`chatId`/`sessionId`/`cwd`) is
+  mirrored to `localStorage['claude.activeChat']`; a page reload re-attaches
+  and replays from the server ring, falling back to the jsonl transcript if the
+  server restarted. On WS drop (iOS backgrounding) a "Reconnecting…" pill shows
+  over the transcript; `app.js` reconnects immediately on
+  `visibilitychange`/`pageshow` and the view replays everything missed by seq.
+  Live events are deduped/ordered by `seq`; a gap (lossy backpressure) triggers
+  a replay fetch.
+
+- **Sessions live here now** (the Sessions tab is gone from the nav; `#sessions`
+  stays routable): the folder chip is a session switcher — a sheet listing every
+  live server chat with name, cwd, running/idle dot, preview, and inline
+  rename/kill actions. "New session…" opens the shared directory picker
+  (`web/components/dirpicker.js`, a bottom-sheet browser over the Files API)
+  and creates an idle chat there.
+- **"+" button** beside the composer: Photo (camera roll/camera) and File
+  uploads go through `POST /api/files/upload?dest=<session cwd>` via XHR (real
+  progress for large files) and are handed to Claude as file paths appended to
+  the next message; "Add repo reference" adds a `--add-dir` folder, shown as
+  removable accent chips above the composer.
 
 ### Entry points & interchange
 

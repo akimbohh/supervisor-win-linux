@@ -12,6 +12,7 @@
     wsHandlers: new Set(),
     currentTab: null,
     currentView: null,
+    viewCache: {},   // tab -> { host, view } for views that persist across navigation
   };
 
   // ── Global error handlers (so we see what's actually failing) ──
@@ -23,6 +24,22 @@
     try { window.toast && window.toast.error('Unhandled: ' + ((e.reason && e.reason.message) || String(e.reason))); } catch (_) {}
     console.error('[unhandledrejection]', e.reason);
   });
+
+  // ── iOS overscroll guard ──
+  // In home-screen (standalone) mode WebKit pans the whole viewport whenever a
+  // touch drag finds nothing to scroll — a drag on the header/tab bar/composer,
+  // or in a pane whose content doesn't overflow yet. overscroll-behavior in
+  // styles.css contains panes that DO overflow; this blocks everything else.
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 1) return;
+    for (let n = e.target instanceof Element ? e.target : null; n && n !== document.body; n = n.parentElement) {
+      if (n.scrollHeight > n.clientHeight || n.scrollWidth > n.clientWidth) {
+        const o = getComputedStyle(n);
+        if (/auto|scroll/.test(o.overflowY + o.overflowX)) return;
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
 
   // ── Service worker ──
   if ('serviceWorker' in navigator) {
@@ -60,9 +77,9 @@
 
   // ── Hash routing ──
   function parseHash() {
-    const h = location.hash.slice(1) || 'sessions';
+    const h = location.hash.slice(1) || 'claude';
     const [tab, ...rest] = h.split('/');
-    return { tab: tab || 'sessions', rest, raw: h };
+    return { tab: tab || 'claude', rest, raw: h };
   }
 
   function setActiveTab(tab) {
@@ -71,13 +88,16 @@
     }
   }
 
+  // sessions/processes have no tab-bar slot anymore (merged into Claude and
+  // System respectively) but stay directly routable so deep links, shortcuts
+  // and old bookmarks keep working.
   const VIEWS = {
     claude:    () => window.InteractiveView,
     sessions:  () => window.SessionsView,
     files:     () => window.FilesView,
     console:   () => window.ConsoleView,
     processes: () => window.ProcessesView,
-    system:    () => window.SystemView,
+    system:    () => window.SystemCombinedView,
     settings:  () => window.SettingsView,
   };
 
@@ -105,20 +125,41 @@
 
     const main = document.getElementById('main');
     const enter = async () => {
-      // Tear down previous
-      if (App.currentView && typeof App.currentView.destroy === 'function') {
-        try { App.currentView.destroy(); } catch (e) {}
+      // Tear down — or, for a view that returned persist:true, suspend — the
+      // previous view. A persistent view keeps its DOM and closures alive
+      // detached from the document; its WS handlers keep rendering into the
+      // off-screen tree, so nothing is lost while another tab is showing.
+      const prev = App.currentView, prevTab = App.currentTab;
+      if (prev) {
+        if (prev.persist && App.viewCache[prevTab]) {
+          try { if (typeof prev.suspend === 'function') prev.suspend(); } catch (e) {}
+        } else if (typeof prev.destroy === 'function') {
+          try { prev.destroy(); } catch (e) {}
+        }
       }
       App.currentTab = tab;
       App.currentView = null;
-      main.innerHTML = '';
+      main.innerHTML = ''; // detaches a persistent host without destroying it
       if (!factory) {
         main.appendChild(window.emptyState({ icon: 'help', title: 'Unknown tab', body: tab }));
         return;
       }
+      const cached = App.viewCache[tab];
+      if (cached) {
+        main.appendChild(cached.host);
+        App.currentView = cached.view;
+        try { if (typeof cached.view.resume === 'function') cached.view.resume(rest); } catch (e) {}
+        return;
+      }
+      // Views mount into a layout-neutral host (display:contents) so a
+      // persistent view can be re-parented later without touching siblings.
+      const host = document.createElement('div');
+      host.className = 'view-host';
+      main.appendChild(host);
       try {
-        const v = await factory(main, { rest, app: App });
+        const v = await factory(host, { rest, app: App });
         App.currentView = v || {};
+        if (v && v.persist) App.viewCache[tab] = { host, view: v };
       } catch (e) {
         console.error('[view ' + tab + ']', e);
         main.innerHTML = '';
@@ -139,13 +180,21 @@
   window.addEventListener('hashchange', navigate);
 
   // ── WebSocket ──
+  // Views receive a synthetic local message { topic:'_conn', payload:{state} }
+  // on connect/disconnect so they can show a reconnecting state and replay
+  // whatever they missed (it never comes from the server).
+  function notifyConn(state) {
+    for (const h of App.wsHandlers) { try { h({ topic: '_conn', payload: { state } }); } catch (e) {} }
+  }
   function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const url = proto + '://' + location.host + '/ws';
     let backoff = 500;
+    let reconnectTimer = null;
     function open() {
+      if (App.ws && (App.ws.readyState === 0 || App.ws.readyState === 1)) return;
       try { App.ws = new WebSocket(url); }
-      catch (e) { setTimeout(open, backoff); backoff = Math.min(backoff * 2, 15000); return; }
+      catch (e) { reconnectTimer = setTimeout(open, backoff); backoff = Math.min(backoff * 2, 15000); return; }
       App.ws.addEventListener('open', () => {
         App.wsConnected = true; backoff = 500;
         setConnDot('online');
@@ -153,12 +202,14 @@
         for (const t of App.wsTopics) safeSend({ type: 'sub', topic: t });
         startPingLoop();
         checkRestartFlagOnReconnect();
+        notifyConn('online');
       });
       App.ws.addEventListener('close', () => {
         App.wsConnected = false;
         setConnDot('offline');
         stopPingLoop();
-        setTimeout(open, backoff); backoff = Math.min(backoff * 2, 15000);
+        notifyConn('offline');
+        reconnectTimer = setTimeout(open, backoff); backoff = Math.min(backoff * 2, 15000);
       });
       App.ws.addEventListener('message', (e) => {
         let msg;
@@ -167,6 +218,16 @@
         for (const h of App.wsHandlers) { try { h(msg); } catch (e) {} }
       });
     }
+    // iOS home-screen PWA: backgrounding kills the socket. Reconnect the moment
+    // we're foregrounded again instead of waiting out the backoff timer.
+    function poke() {
+      if (App.ws && (App.ws.readyState === 0 || App.ws.readyState === 1)) return;
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      backoff = 500;
+      open();
+    }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poke(); });
+    window.addEventListener('pageshow', poke);
     open();
   }
 
@@ -425,7 +486,7 @@
       if (msg.topic === 'settings') applySettings(msg.payload);
     });
 
-    if (!location.hash) location.replace('#sessions');
+    if (!location.hash) location.replace('#claude');
     checkRestartFlagOnBoot();
     connectWS();
     setupShortcuts();

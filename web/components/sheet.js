@@ -28,7 +28,7 @@
       h.textContent = title; sheet.appendChild(h);
     }
     const body = document.createElement('div');
-    body.style.padding = '8px 16px 16px'; body.style.overflow = 'auto'; body.style.flex = '1 1 auto'; body.style.minHeight = '0';
+    body.style.padding = '8px 16px 16px'; body.style.overflow = 'auto'; body.style.flex = '1 1 auto'; body.style.minHeight = '0'; body.style.overscrollBehavior = 'contain';
     if (content instanceof Node) body.appendChild(content);
     else if (typeof content === 'string') body.innerHTML = content;
     sheet.appendChild(body);

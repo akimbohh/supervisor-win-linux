@@ -966,6 +966,8 @@ window.FilesView = async function (root, { rest, app }) {
     }).join('\n');
     return out;
   }
+  // Shared with the Claude chat view (assistant replies are markdown).
+  window.renderMarkdown = renderMarkdown;
 
   // PDF.js renderer — first 5 pages, lazy-load worker.
   async function renderPDF(host, url) {
