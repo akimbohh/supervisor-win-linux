@@ -6,7 +6,9 @@
 //     never change between releases, no point re-fetching.
 //   - /api/* and /ws: network-only (never cached, never intercepted).
 
-const CACHE = 'supervisor-shell-v23';
+// v24: liquid-glass button skin — new --glass-* tokens in styles.css + the
+// #lg-refract SVG filter in index.html (see LIQUID-GLASS-PROMPT.md).
+const CACHE = 'supervisor-shell-v27';
 const PRECACHE = [
   '/',
   '/login',

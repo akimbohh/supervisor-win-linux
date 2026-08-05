@@ -82,11 +82,17 @@
   --radius-pill:  999px;
 
   /* Layout */
-  --tabbar-h:     56px;
+  --tabbar-h:     52px;
   --header-h:     52px;
   --rail-w:       220px;
   --safe-bot:     env(safe-area-inset-bottom, 0);
   --safe-top:     env(safe-area-inset-top, 0);
+  /* Tab bar bottom inset — deliberately 0. Reserving any part of the
+     home-indicator inset (34px on a notched iPhone) leaves a visible dead
+     strip under the icons; the indicator is an overlay and the bar is meant
+     to run edge-to-edge beneath it. Kept as a var so the toast offset and
+     anything else stacking above the bar stays in one place. */
+  --tabbar-pad:   0px;
 
   /* Motion */
   --ease:         cubic-bezier(0.4, 0, 0.2, 1);
@@ -94,6 +100,29 @@
   --t-fast:       100ms;
   --t:            150ms;
   --t-slow:       200ms;
+
+  /* Liquid glass (buttons) — frost fill + tint gradient + glossy top edge +
+     soft lift. One source for the whole app: the skin at the bottom of this
+     file reads ONLY these tokens, so both themes, hover states, and the
+     reduced-transparency fallback all tune from here. Recipe:
+     LIQUID-GLASS-PROMPT.md + reference/liquid-glass/. */
+  --glass-bg:              rgb(255 255 255 / 0.07);
+  --glass-bg-hover:        rgb(255 255 255 / 0.13);
+  --glass-bg-strong:       rgb(20 20 20 / 0.62);
+  --glass-grad:            linear-gradient(180deg, rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.02) 55%, rgb(0 0 0 / 0.08));
+  --glass-grad-accent:     linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0.05) 55%, rgb(0 0 0 / 0.12));
+  --glass-blur:            12px;
+  --glass-frost:           blur(var(--glass-blur)) saturate(140%);
+  --glass-frost-lite:      blur(8px) saturate(130%);
+  --glass-border:          rgb(255 255 255 / 0.16);
+  --glass-highlight:       inset 0 1px 0 rgb(255 255 255 / 0.25), inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  --glass-shadow:          0 4px 14px rgb(0 0 0 / 0.32);
+  --glass-accent-bg:       color-mix(in oklab, var(--accent) 75%, transparent);
+  --glass-accent-bg-hover: color-mix(in oklab, var(--accent) 87%, transparent);
+  --glass-accent-border:   color-mix(in oklab, var(--accent) 55%, transparent);
+  --glass-danger-bg:       color-mix(in oklab, var(--danger) 78%, transparent);
+  --glass-danger-border:   color-mix(in oklab, var(--danger) 55%, transparent);
+  --glass-refract: ; /* empty = no-op; the Blink-only gate at the bottom fills it */
 }
 
 /* Accent variants — picked in Settings. Each defines fill + on-surface text. */
@@ -113,6 +142,19 @@
   --ok:#15803d; --ok-soft:#15803d1a; --warn:#a16207; --warn-soft:#a162071a; --info-soft:#0369a11a;
   --sh-1:0 1px 2px rgb(30 28 20 / 0.06); --sh-3:0 12px 32px rgb(30 28 20 / 0.18); --sh-4:0 8px 24px rgb(30 28 20 / 0.16);
   --accent-on:#ffffff;
+  /* Liquid glass over warm paper: light-tinted frost, dark hairline, brighter
+     gloss; accent/danger tints run more opaque so light-on-accent text holds. */
+  --glass-bg:rgb(255 255 255 / 0.45); --glass-bg-hover:rgb(255 255 255 / 0.65); --glass-bg-strong:rgb(255 255 255 / 0.78);
+  --glass-grad:linear-gradient(180deg, rgb(255 255 255 / 0.60), rgb(255 255 255 / 0.12) 55%, rgb(30 28 20 / 0.05));
+  --glass-grad-accent:linear-gradient(180deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.06) 55%, rgb(30 28 20 / 0.10));
+  --glass-border:rgb(30 28 20 / 0.16);
+  --glass-highlight:inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 0 0 1px rgb(255 255 255 / 0.30);
+  --glass-shadow:0 4px 14px rgb(30 28 20 / 0.12);
+  --glass-accent-bg:color-mix(in oklab, var(--accent) 88%, transparent);
+  --glass-accent-bg-hover:color-mix(in oklab, var(--accent) 96%, transparent);
+  --glass-accent-border:color-mix(in oklab, var(--accent) 60%, transparent);
+  --glass-danger-bg:color-mix(in oklab, var(--danger) 88%, transparent);
+  --glass-danger-border:color-mix(in oklab, var(--danger) 60%, transparent);
 }
 :root[data-theme="light"][data-accent="amber"]  { --accent:#b06000; --accent-text:#8a4c00; --accent-soft:#b060001a; --accent-dim:#8a4c00; }
 :root[data-theme="light"][data-accent="teal"]   { --accent:#0f766e; --accent-text:#0d6a63; --accent-soft:#0f766e1a; --accent-dim:#0d6a63; }
@@ -131,6 +173,18 @@
     --ok:#15803d; --ok-soft:#15803d1a; --warn:#a16207; --warn-soft:#a162071a; --info-soft:#0369a11a;
     --sh-1:0 1px 2px rgb(30 28 20 / 0.06); --sh-3:0 12px 32px rgb(30 28 20 / 0.18); --sh-4:0 8px 24px rgb(30 28 20 / 0.16);
     --accent-on:#fff;
+    /* Liquid glass — same light-paper values as [data-theme="light"] above. */
+    --glass-bg:rgb(255 255 255 / 0.45); --glass-bg-hover:rgb(255 255 255 / 0.65); --glass-bg-strong:rgb(255 255 255 / 0.78);
+    --glass-grad:linear-gradient(180deg, rgb(255 255 255 / 0.60), rgb(255 255 255 / 0.12) 55%, rgb(30 28 20 / 0.05));
+    --glass-grad-accent:linear-gradient(180deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0.06) 55%, rgb(30 28 20 / 0.10));
+    --glass-border:rgb(30 28 20 / 0.16);
+    --glass-highlight:inset 0 1px 0 rgb(255 255 255 / 0.85), inset 0 0 0 1px rgb(255 255 255 / 0.30);
+    --glass-shadow:0 4px 14px rgb(30 28 20 / 0.12);
+    --glass-accent-bg:color-mix(in oklab, var(--accent) 88%, transparent);
+    --glass-accent-bg-hover:color-mix(in oklab, var(--accent) 96%, transparent);
+    --glass-accent-border:color-mix(in oklab, var(--accent) 60%, transparent);
+    --glass-danger-bg:color-mix(in oklab, var(--danger) 88%, transparent);
+    --glass-danger-border:color-mix(in oklab, var(--danger) 60%, transparent);
   }
   :root[data-theme="auto"][data-accent="amber"]  { --accent:#b06000; --accent-text:#8a4c00; --accent-soft:#b060001a; --accent-dim:#8a4c00; }
   :root[data-theme="auto"][data-accent="teal"]   { --accent:#0f766e; --accent-text:#0d6a63; --accent-soft:#0f766e1a; --accent-dim:#0d6a63; }
@@ -206,11 +260,16 @@ a:hover { text-decoration: underline; }
   /* Header row must be 'auto' — its height is var(--header-h) + safe-area-inset-top
      on devices with a notch, and a fixed track size would let it overflow into main. */
   grid-template-rows: auto 1fr auto;
-  height: 100dvh;
+  /* Size off <body> (position:fixed; inset:0), NOT 100dvh. With
+     viewport-fit=cover, inset:0 covers the whole screen including the
+     home-indicator strip, while WebKit's dvh stops short of it — a 100dvh app
+     therefore ends ~34px above the real bottom edge and the body background
+     shows through under the tab bar. That was the stubborn "gap". */
+  height: 100%;
   /* app.js sets --vvh to the visual-viewport height while the software
      keyboard is open (iOS standalone doesn't shrink the layout viewport). */
-  height: var(--vvh, 100dvh);
-  width: 100vw;
+  height: var(--vvh, 100%);
+  width: 100%;
 }
 
 /* Header */
@@ -273,8 +332,8 @@ a:hover { text-decoration: underline; }
   background: color-mix(in oklab, var(--bg) 80%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  padding-bottom: var(--safe-bot);
-  height: calc(var(--tabbar-h) + var(--safe-bot));
+  padding-bottom: var(--tabbar-pad);
+  height: calc(var(--tabbar-h) + var(--tabbar-pad));
   position: sticky;
   bottom: 0; z-index: 4;
 }
@@ -533,7 +592,7 @@ a:hover { text-decoration: underline; }
 /* ── Toasts ── */
 .toasts {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(var(--tabbar-h) + 12px + var(--safe-bot));
+  bottom: calc(var(--tabbar-h) + 12px + var(--tabbar-pad));
   z-index: 100;
   display: flex; flex-direction: column-reverse; gap: 8px;
   pointer-events: none;
@@ -1264,3 +1323,161 @@ body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index
 .dirpick-row .lbl { font-size:14px; }
 .dirpick-row .hint { margin-left:auto; font-size:11px; color:var(--text-4); max-width:45%; }
 .dirpick-row.muted .lbl { color:var(--text-3); }
+
+/* ══ Liquid glass skin ════════════════════════════════════════════════════
+ * See LIQUID-GLASS-PROMPT.md; technique from reference/liquid-glass/ adapted
+ * to no-build CSS. Layers per button: translucent frost (backdrop blur +
+ * saturate, with the -webkit- twin for iOS), a top-to-bottom tint gradient
+ * (curved-slab read), a glossy 1px top inset + hairline rim, and a soft lift
+ * shadow. Everything reads the --glass-* tokens in :root (light-theme
+ * overrides above), so the whole app tunes from one place. This is a SKIN:
+ * no layout, size, radius, or hit-target changes; :active scale, :disabled
+ * dimming, and accent/danger semantics are untouched. Without
+ * backdrop-filter support this whole block is skipped → today's solid look.
+ * No animation is added, so prefers-reduced-motion needs nothing extra. */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  /* Standard slabs — full frost. */
+  .btn, .chat-chip, .chat-suggest button {
+    background-color: var(--glass-bg);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-frost);
+    backdrop-filter: var(--glass-frost) var(--glass-refract);
+  }
+  /* Hover/disabled restated: the pre-glass rules set `background` shorthand
+     at higher specificity, which would strip the gradient mid-hover. */
+  .btn:hover, .chat-chip:hover, .chat-suggest button:hover {
+    background-color: var(--glass-bg-hover);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+  }
+  .btn:disabled:hover {
+    background-color: var(--glass-bg);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+  }
+
+  /* Ghost — borderless thin frost so header icon slots read as glass discs;
+     hover raises the slab. */
+  .btn.ghost {
+    background-color: transparent;
+    background-image: var(--glass-grad);
+    border-color: transparent;
+    box-shadow: var(--glass-highlight);
+    -webkit-backdrop-filter: var(--glass-frost-lite);
+    backdrop-filter: var(--glass-frost-lite);
+  }
+  .btn.ghost:hover {
+    background-color: var(--glass-bg-hover);
+    background-image: var(--glass-grad);
+    border-color: transparent;
+    color: var(--text);
+  }
+
+  /* Accent action stays the accent action — accent-tinted glass, not grey. */
+  .btn.primary, .chat-send, .tc-newpill {
+    background-color: var(--glass-accent-bg);
+    background-image: var(--glass-grad-accent);
+    border-color: var(--glass-accent-border);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-frost);
+    backdrop-filter: var(--glass-frost) var(--glass-refract);
+  }
+  .btn.primary:hover {
+    background-color: var(--glass-accent-bg-hover);
+    background-image: var(--glass-grad-accent);
+    border-color: var(--glass-accent-border);
+  }
+
+  /* Destructive stays red. */
+  .btn.danger.primary, .chat-send.stop {
+    background-color: var(--glass-danger-bg);
+    background-image: var(--glass-grad-accent);
+    border-color: var(--glass-danger-border);
+  }
+
+  /* Composer "+" sits inside the opaque input pill: gloss + tint only, no
+     frost (nothing visible behind it to blur; keeps the composer cheap). */
+  .chat-plus { background-image: var(--glass-grad); box-shadow: var(--glass-highlight); }
+  .chat-plus:hover { background-color: var(--glass-bg-hover); background-image: var(--glass-grad); color: var(--text); }
+
+  /* Console keys + shell tabs + tool-card pills — lightest frost, no drop
+     shadow, no refraction: they neighbour the terminal repaint (see the
+     performance note in LIQUID-GLASS-PROMPT.md). The .key:active solid
+     accent press-state from above still wins on specificity. */
+  .kbd-row .key, .term-tab, .tc-count {
+    background-color: var(--glass-bg);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+    box-shadow: var(--glass-highlight);
+    -webkit-backdrop-filter: var(--glass-frost-lite);
+    backdrop-filter: var(--glass-frost-lite);
+  }
+  .term-tab:hover, .tc-count:hover {
+    background-color: var(--glass-bg-hover);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+  }
+  .term-tab.active { background-color: var(--accent-soft); background-image: var(--glass-grad); }
+
+  /* Jump-to-latest pills float over the busiest content (terminal text,
+     chat) — the strong tint keeps the label readable everywhere. */
+  .term-jump, .chat-jump {
+    background-color: var(--glass-bg-strong);
+    background-image: var(--glass-grad);
+    border-color: var(--glass-border);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    -webkit-backdrop-filter: var(--glass-frost);
+    backdrop-filter: var(--glass-frost) var(--glass-refract);
+  }
+
+  /* Tab bar: glass the active tab. The bar itself already frosts, so no
+     nested backdrop-filter here — just tint + gloss on the pressed tab. */
+  .tabbar a.active {
+    border-radius: var(--radius);
+    background-image: linear-gradient(180deg, color-mix(in oklab, var(--accent) 18%, transparent), color-mix(in oklab, var(--accent) 4%, transparent) 70%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.10);
+  }
+}
+
+/* 0-size holder for the #lg-refract SVG defs in index.html. */
+.lg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Blink-only extra: faint turbulence refraction + chromatic split of the
+ * backdrop (the #lg-refract filter in index.html). WebKit parses
+ * `backdrop-filter: url()` but drops the whole declaration at render (see
+ * reference/liquid-glass/BROWSERS.md), so it must never reach Safari:
+ * paint() is the reliable pure-CSS "this is Chromium" gate — @supports on
+ * the url() value alone passes in engines that only parse it. On iOS the
+ * token stays empty and its absence is invisible. */
+@supports (background: paint(lg)) and (backdrop-filter: url(#lg)) {
+  :root { --glass-refract: url(#lg-refract); }
+}
+
+/* Reduced transparency → clean solid buttons. Collapsing the tokens reverts
+ * every glass rule above — variants and hover states included — since they
+ * read nothing but tokens. Kept OUTSIDE the @supports block and stated as a
+ * plain override so engines that don't know this media feature simply skip
+ * it (never accidentally dropping the glass for everyone). */
+@media (prefers-reduced-transparency: reduce) {
+  :root, :root[data-theme="light"], :root[data-theme="auto"] {
+    --glass-bg: var(--surface-2);
+    --glass-bg-hover: var(--surface-3);
+    --glass-bg-strong: var(--surface-3);
+    --glass-grad: none;
+    --glass-grad-accent: none;
+    --glass-frost: none;
+    --glass-frost-lite: none;
+    --glass-refract: ;
+    --glass-border: var(--border);
+    --glass-highlight: 0 0 0 0 transparent;
+    --glass-shadow: 0 0 0 0 transparent;
+    --glass-accent-bg: var(--accent);
+    --glass-accent-bg-hover: var(--accent-dim);
+    --glass-accent-border: var(--accent);
+    --glass-danger-bg: var(--danger);
+    --glass-danger-border: var(--danger);
+  }
+  .tabbar a.active { background-image: none; box-shadow: none; }
+}
